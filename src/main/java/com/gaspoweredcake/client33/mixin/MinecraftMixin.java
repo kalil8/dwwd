@@ -113,6 +113,7 @@ public abstract class MinecraftMixin implements IMinecraft {
     @Inject(at = @At("HEAD"), method = "tick")
     private void onPreTick(CallbackInfo ci) {
         startUseItemCalled = false;
+        if (!((Minecraft) (Object) this).isWindowActive()) com.gaspoweredcake.client33.utils.misc.input.Input.clearState();
 
         Profiler.get().push(Client33.MOD_ID + "_pre_update");
         Client33.EVENT_BUS.post(TickEvent.Pre.get());
@@ -289,6 +290,7 @@ public abstract class MinecraftMixin implements IMinecraft {
     // Freecam
     @Inject(method = "pick", at = @At("HEAD"), cancellable = true)
     private void updateTargetedEntityInvoke(float partialTicks, CallbackInfo ci) {
+        if (Modules.get() == null) return;
         Freecam freecam = Modules.get().get(Freecam.class);
         boolean highwayBuilder = Modules.get().isActive(HighwayBuilder.class);
 

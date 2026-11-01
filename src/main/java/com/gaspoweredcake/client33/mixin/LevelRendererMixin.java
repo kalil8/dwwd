@@ -6,7 +6,7 @@
 package com.gaspoweredcake.client33.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import com.mojang.blaze3d.resource.ResourceHandle;
@@ -78,7 +78,7 @@ public abstract class LevelRendererMixin implements ILevelRenderer {
     // Entity Shaders
 
     @Inject(method = "render", at = @At("HEAD"))
-    private void onRenderLevelHead(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, CallbackInfo ci) {
+    private void onRenderLevelHead(CallbackInfo ci) {
         PostProcessShaders.beginRender();
     }
 
@@ -130,7 +130,12 @@ public abstract class LevelRendererMixin implements ILevelRenderer {
         client33$pushEntityOutlineFramebuffer(shader.framebuffer);
         try {
             try (var frame = renderDispatcher.prepareFrame(outlineRenderCommandQueue)) {
-                frame.executeOutline();
+                try (var pass = com.mojang.blaze3d.systems.RenderSystem.getDevice().createCommandEncoder()
+                    .createRenderPass(() -> "Client33 entity mask", shader.framebuffer.getColorTextureView(),
+                        java.util.Optional.of(new org.joml.Vector4f()), null, java.util.OptionalDouble.empty())) {
+                    com.mojang.blaze3d.systems.RenderSystem.bindDefaultUniforms(pass);
+                    frame.executeOutline(pass);
+                }
             }
         } finally {
             outlineRenderCommandQueue.submitsPerOrder.clear();
@@ -138,7 +143,7 @@ public abstract class LevelRendererMixin implements ILevelRenderer {
         }
     }
 
-    @Inject(method = "lambda$addMainPass$0", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher$PreparedFrame;executeOutline()V", shift = At.Shift.AFTER))
+    @Inject(method = "executeOutline", at = @At("TAIL"))
     private void addMainPass$submitEntityVertices(CallbackInfo ci) {
         PostProcessShaders.submitEntityVertices();
     }

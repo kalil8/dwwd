@@ -10,6 +10,7 @@ import com.gaspoweredcake.client33.events.render.Render3DEvent;
 import com.gaspoweredcake.client33.renderer.Renderer2D;
 import com.gaspoweredcake.client33.renderer.Renderer3D;
 import com.gaspoweredcake.client33.utils.render.VisualGeometry;
+import com.gaspoweredcake.client33.utils.render.SurfaceEspRenderer;
 import com.gaspoweredcake.client33.systems.modules.Modules;
 import com.gaspoweredcake.client33.systems.modules.combat.KillAura;
 import com.gaspoweredcake.client33.renderer.ShapeMode;
@@ -47,8 +48,8 @@ import java.util.Set;
 public class ESP extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgSignature = settings.createGroup("Signature visuals");
-    public final Setting<Boolean> animate = sgSignature.add(new BoolSetting.Builder().name("animate").description("Animate signature ESP scans and orbit markers.").defaultValue(true).build());
-    public final Setting<Boolean> throughWalls = sgSignature.add(new BoolSetting.Builder().name("signature-through-walls").description("Show Hologram and Constellation through terrain.").defaultValue(true).build());
+    public final Setting<Boolean> animate = sgSignature.add(new BoolSetting.Builder().name("animate").description("Animate signature scans, model surface patterns and ghost trails.").defaultValue(true).build());
+    public final Setting<Boolean> throughWalls = sgSignature.add(new BoolSetting.Builder().name("signature-through-walls").description("Show signature and model surface effects through terrain.").defaultValue(true).build());
     public final Setting<Boolean> groundMarker = sgSignature.add(new BoolSetting.Builder().name("ground-marker").description("Draw a segmented footprint under signature ESP.").defaultValue(true).build());
     public final Setting<Boolean> tether = sgSignature.add(new BoolSetting.Builder().name("target-tether").description("Connect your player to KillAura's selected target in signature modes.").defaultValue(false).build());
     public final Setting<Integer> detail = sgSignature.add(new IntSetting.Builder().name("signature-detail").description("Geometry segments per entity.").defaultValue(32).range(12, 64).sliderRange(12, 64).build());
@@ -64,6 +65,20 @@ public class ESP extends Module {
         .defaultValue(Mode._2D)
         .build()
     );
+
+    private final SettingGroup sgSurface = settings.createGroup("Model surface effects");
+    public final Setting<Boolean> extendedSurfaceRange = sgSurface.add(new BoolSetting.Builder().name("extended-surface-range").description("Render received entities outside terrain render distance in model-surface modes; Max Distance still applies.").defaultValue(true).visible(this::isSurfaceMode).build());
+    public final Setting<Double> strokeWidth = sgSurface.add(new DoubleSetting.Builder().name("surface-stroke-width").description("Approximate pixel width of model-surface ribbons, with feathered edges.").defaultValue(1.5).range(0.6,3).sliderRange(0.6,3).visible(this::isSurfaceMode).build());
+    public final Setting<Integer> surfaceBudget = sgSurface.add(new IntSetting.Builder().name("surface-budget").description("Maximum model surface effects per frame; targets and nearby entities first.").defaultValue(16).range(1,32).sliderRange(1,32).visible(this::isSurfaceMode).build());
+    public final Setting<Double> surfaceSpeed = sgSurface.add(new DoubleSetting.Builder().name("surface-speed").description("Animation cycles per second; zero freezes the pattern.").defaultValue(0.25).range(0,2).sliderRange(0,2).visible(() -> mode.get()==Mode.FlowingContours || mode.get()==Mode.RadarSweep || mode.get()==Mode.OrbitingParticles).build());
+    public final Setting<Integer> contourCount = sgSurface.add(new IntSetting.Builder().name("contour-count").description("Number of moving contour levels across the model.").defaultValue(12).range(3,24).sliderRange(3,24).visible(() -> mode.get()==Mode.FlowingContours).build());
+    public final Setting<Double> sweepWidth = sgSurface.add(new DoubleSetting.Builder().name("sweep-width").description("Radar band width as a fraction of model height.").defaultValue(0.18).range(0.05,0.5).sliderRange(0.05,0.5).visible(() -> mode.get()==Mode.RadarSweep).build());
+    public final Setting<Integer> trailSamples = sgSurface.add(new IntSetting.Builder().name("trail-samples").description("Maximum historical model poses per entity.").defaultValue(4).range(1,6).sliderRange(1,6).visible(() -> mode.get()==Mode.GhostTrails).build());
+    public final Setting<Integer> trailLifetime = sgSurface.add(new IntSetting.Builder().name("trail-lifetime-ms").description("Fade time of historical poses in milliseconds.").defaultValue(600).range(100,1200).sliderRange(100,1200).visible(() -> mode.get()==Mode.GhostTrails).build());
+    public final Setting<Integer> particleCount = sgSurface.add(new IntSetting.Builder().name("particle-count").description("Sparse points travelling along silhouette edges.").defaultValue(10).range(3,24).sliderRange(3,24).visible(() -> mode.get()==Mode.OrbitingParticles).build());
+    public final Setting<Double> hiddenOpacity = sgSurface.add(new DoubleSetting.Builder().name("hidden-edge-opacity").description("Opacity multiplier for dashed edges through walls.").defaultValue(0.28).range(0.05,0.7).sliderRange(0.05,0.7).visible(() -> mode.get()==Mode.TwoLayer).build());
+    private final SurfaceEspRenderer surfaceRenderer = new SurfaceEspRenderer();
+
 
     public final Setting<Boolean> highlightTarget = sgGeneral.add(new BoolSetting.Builder()
         .name("highlight-target")
@@ -166,10 +181,10 @@ public class ESP extends Module {
 
     private final Setting<Double> maxDistance = sgGeneral.add(new DoubleSetting.Builder()
         .name("max-distance")
-        .description("Maximum distance from the camera for all ESP modes.")
-        .defaultValue(128)
-        .range(1, 512)
-        .sliderRange(16, 256)
+        .description("Maximum distance for received entities, in blocks. 4800 blocks equals 300 chunks; the server must still send the entity.")
+        .defaultValue(4800)
+        .range(1, 4800)
+        .sliderRange(16, 4800)
         .build()
     );
 
@@ -318,21 +333,32 @@ public class ESP extends Module {
         super(Categories.Render, "esp", "Renders entities through walls.");
     }
 
+    @Override public void onDeactivate() { surfaceRenderer.clear(); }
+
+    public boolean isSurfaceMode() {
+        return switch(mode.get()) {
+            case FlowingContours, RadarSweep, GhostTrails, OrbitingParticles, TwoLayer -> true;
+            default -> false;
+        };
+    }
+
     // Box
 
     @EventHandler
     private void onRender3D(Render3DEvent event) {
+        if (!isSurfaceMode()) surfaceRenderer.clear();
         if (isScreenMode()) return;
 
         count = 0;
 
         boolean signature = mode.get() == Mode.Hologram || mode.get() == Mode.Constellation;
-        if (signature) {
+        if (signature || isSurfaceMode()) {
+            if (isSurfaceMode()) surfaceRenderer.begin(this);
             // Retain only the best candidates instead of sorting every eligible entity.
             Comparator<SignatureCandidate> order = Comparator.comparing((SignatureCandidate candidate) -> !candidate.target())
                 .thenComparingDouble(SignatureCandidate::distanceSquared)
                 .thenComparingInt(candidate -> candidate.entity().getId());
-            int limit = entityBudget.get();
+            int limit = isSurfaceMode() ? surfaceBudget.get() : entityBudget.get();
             PriorityQueue<SignatureCandidate> candidates = new PriorityQueue<>(limit, order.reversed());
             for (Entity entity : mc.level.entitiesForRendering()) {
                 if (getColor(entity) == null) continue;
@@ -348,10 +374,12 @@ public class ESP extends Module {
             ordered.sort(order);
             for (SignatureCandidate candidate : ordered) {
                 Entity entity = candidate.entity();
-                drawSignature(event, entity);
+                if (isSurfaceMode()) surfaceRenderer.render(event, entity, this);
+                else drawSignature(event, entity);
                 if (candidate.target() && targetHitbox.get()) drawBoundingBox(event, entity);
                 count++;
             }
+            if (isSurfaceMode()) surfaceRenderer.end();
             return;
         }
 
@@ -521,7 +549,7 @@ public class ESP extends Module {
         if (!drawAsTarget(entity) && !entities.get().contains(entity.getType())) return true;
         if (entity == mc.player && ignoreSelf.get()) return true;
         if (entity == mc.getCameraEntity() && mc.options.getCameraType().isFirstPerson()) return true;
-        return !EntityUtils.isInRenderDistance(entity)
+        return (!(isSurfaceMode() && extendedSurfaceRange.get()) && !EntityUtils.isInRenderDistance(entity))
             || PlayerUtils.squaredDistanceToCamera(entity.getX(), entity.getY(), entity.getZ()) > maxDistance.get() * maxDistance.get();
     }
 
@@ -661,7 +689,12 @@ public class ESP extends Module {
         Wireframe,
         _2D,
         Shader,
-        Glow;
+        Glow,
+        FlowingContours,
+        RadarSweep,
+        GhostTrails,
+        OrbitingParticles,
+        TwoLayer;
 
         @Override
         public String toString() {

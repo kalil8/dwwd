@@ -35,6 +35,7 @@ import com.gaspoweredcake.client33.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import com.gaspoweredcake.client33.utils.intel.SectionSnapshot;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
@@ -232,7 +233,7 @@ public class StashFinder extends Module {
 
             if (!blockBlacklist.isEmpty()) {
                 BlockPos below = blockEntity.getBlockPos().below();
-                if (blockBlacklist.contains(event.chunk().getBlockState(below).getBlock())) continue;
+                if (blockBlacklist.contains(SectionSnapshot.live(mc.level, below).getBlock())) continue;
             }
 
             switch (blockEntity) {

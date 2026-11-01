@@ -7,6 +7,7 @@ package com.gaspoweredcake.client33.systems.modules.combat;
 
 
 import com.gaspoweredcake.client33.events.packets.PacketEvent;
+import com.gaspoweredcake.client33.events.game.GameLeftEvent;
 import com.gaspoweredcake.client33.events.world.TickEvent;
 import com.gaspoweredcake.client33.mixininterface.IServerboundMovePlayerPacket;
 import com.gaspoweredcake.client33.mixininterface.IVec3;
@@ -18,10 +19,13 @@ import com.gaspoweredcake.client33.utils.entity.EntityUtils;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundPunchPacket;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.MaceItem;
+import net.minecraft.world.item.ItemStack;
 
 public class Criticals extends Module {
 
@@ -61,7 +65,15 @@ public class Criticals extends Module {
     );
 
     private ServerboundAttackPacket attackPacket;
-    private ServerboundSwingPacket swingPacket;
+    private ServerboundPunchPacket swingPacket;
+    private LocalPlayer queuedPlayer;
+    private ClientLevel queuedWorld;
+    private Entity queuedTarget;
+    private ItemStack queuedWeapon;
+    private int queuedSlot;
+    private int queuedTicks;
+    private Mode queuedMode;
+    private boolean replaying;
     private boolean sendPackets;
     private int sendTimer;
     private double lastY;
@@ -73,8 +85,28 @@ public class Criticals extends Module {
 
     @Override
     public void onActivate() {
+        clearPending();
+    }
+
+    @Override
+    public void onDeactivate() {
+        clearPending();
+    }
+
+    @EventHandler
+    private void onLeave(GameLeftEvent event) {
+        clearPending();
+    }
+
+    private void clearPending() {
         attackPacket = null;
         swingPacket = null;
+        queuedPlayer = null;
+        queuedWorld = null;
+        queuedTarget = null;
+        queuedWeapon = null;
+        queuedMode = null;
+        queuedTicks = 0;
         sendPackets = false;
         sendTimer = 0;
         lastY = 0;
@@ -83,7 +115,13 @@ public class Criticals extends Module {
 
     @EventHandler
     private void onSendPacket(PacketEvent.Send event) {
+        if (replaying || event.isCancelled() || mc.player == null || mc.level == null) return;
         if (event.packet instanceof ServerboundAttackPacket(int entityId)) {
+            if (sendPackets) {
+                // One jump owns one attack; another click must not replace its context.
+                event.cancel();
+                return;
+            }
             if (mace.get() && mc.player.getMainHandItem().getItem() instanceof MaceItem) {
                 if (mc.player.isFallFlying()) return;
 
@@ -116,6 +154,13 @@ public class Criticals extends Module {
                         if (!sendPackets) {
                             sendPackets = true;
                             attackPacket = (ServerboundAttackPacket) event.packet;
+                            queuedPlayer = mc.player;
+                            queuedWorld = mc.level;
+                            queuedTarget = entity;
+                            queuedWeapon = mc.player.getMainHandItem().copy();
+                            queuedSlot = mc.player.getInventory().getSelectedSlot();
+                            queuedMode = mode.get();
+                            queuedTicks = 0;
 
                             if (mode.get() == Mode.Jump) {
                                 mc.player.jumpFromGround();
@@ -130,11 +175,9 @@ public class Criticals extends Module {
                     }
                 }
             }
-        } else if (event.packet instanceof ServerboundSwingPacket serverboundSwingPacket && mode.get() != Mode.Packet) {
-            if (skipCrit()) return;
-
-            if (sendPackets && swingPacket == null) {
-                swingPacket = serverboundSwingPacket;
+        } else if (event.packet instanceof ServerboundPunchPacket punch && mode.get() != Mode.Packet) {
+            if (sendPackets) {
+                if (swingPacket == null) swingPacket = punch;
                 event.cancel();
             }
         }
@@ -143,6 +186,14 @@ public class Criticals extends Module {
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (sendPackets) {
+            if (++queuedTicks > 30 || mc.player != queuedPlayer || mc.level != queuedWorld
+                || queuedTarget == null || !queuedTarget.isAlive() || queuedTarget.isRemoved()
+                || mc.level.getEntity(queuedTarget.getId()) != queuedTarget || queuedPlayer.isDeadOrDying()
+                || mode.get() != queuedMode || queuedPlayer.getInventory().getSelectedSlot() != queuedSlot
+                || !ItemStack.isSameItemSameComponents(queuedWeapon, queuedPlayer.getMainHandItem())) {
+                clearPending();
+                return;
+            }
             if (mode.get() == Mode.Jump && waitingForPeak) {
                 double currentY = mc.player.getY();
                 if (currentY <= lastY) {
@@ -155,16 +206,20 @@ public class Criticals extends Module {
 
             if (sendTimer <= 0) {
                 if (attackPacket == null || swingPacket == null) {
-                    sendPackets = false;
+                    clearPending();
                     return;
                 }
-                mc.getConnection().send(attackPacket);
-                mc.getConnection().send(swingPacket);
-
-                attackPacket = null;
-                swingPacket = null;
-
-                sendPackets = false;
+                var attack = attackPacket;
+                var swing = swingPacket;
+                var connection = queuedPlayer.connection;
+                clearPending();
+                replaying = true;
+                try {
+                    connection.send(attack);
+                    if (mc.player != null && mc.player.connection == connection) connection.send(swing);
+                } finally {
+                    replaying = false;
+                }
             } else {
                 sendTimer--;
             }

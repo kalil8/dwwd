@@ -32,7 +32,43 @@ public class WVisualPreview extends WWidget {
         r.quad(cx - 14 * unit, top + 70 * unit, 12 * unit, 37 * unit, body);
         r.quad(cx + 2 * unit, top + 70 * unit, 12 * unit, 37 * unit, body);
         double phase = combat ? time * effects.speed.get() : esp.animate.get() ? time : 0;
-        if (combat || esp.mode.get() == ESP.Mode.Hologram || esp.mode.get() == ESP.Mode.Constellation) {
+        if (!combat && esp.isSurfaceMode()) {
+            double motion = esp.animate.get() ? time * esp.surfaceSpeed.get() : 0;
+            switch (esp.mode.get()) {
+                case FlowingContours -> {
+                    for (int i=0;i<esp.contourCount.get();i++) {
+                        double t=(i+motion%1)/esp.contourCount.get();
+                        double yy=top+t*107*unit;
+                        double half=t<0.20?10:t<0.63?28:14;
+                        r.quad(cx-half*unit,yy,half*2*unit,unit,primary);
+                    }
+                }
+                case RadarSweep -> {
+                    double yy=top+(motion%1)*107*unit;
+                    r.quad(cx-28*unit,yy,56*unit,Math.max(unit,107*esp.sweepWidth.get()*unit),new Color(primary).a(primary.a/3));
+                    r.quad(cx-28*unit,yy,56*unit,unit,primary);
+                }
+                case GhostTrails -> {
+                    for(int i=esp.trailSamples.get();i>0;i--) {
+                        Color ghost=new Color(primary).a(primary.a/(i+3));
+                        double dx=-i*8*unit;
+                        r.quad(cx+dx-10*unit,top,20*unit,20*unit,ghost);
+                        r.quad(cx+dx-15*unit,top+24*unit,30*unit,83*unit,ghost);
+                    }
+                }
+                case OrbitingParticles -> {
+                    for(int i=0;i<esp.particleCount.get();i++) {
+                        double a=(motion+(double)i/esp.particleCount.get())*Math.PI*2;
+                        r.quad(cx+Math.cos(a)*31*unit,top+(0.5+Math.sin(a)*0.5)*107*unit,3*unit,3*unit,primary);
+                    }
+                }
+                case TwoLayer -> {
+                    for(int i=0;i<12;i++)r.quad(cx-31*unit,top+i*9*unit,unit,4*unit,new Color(primary).a((int)(primary.a*esp.hiddenOpacity.get())));
+                    r.quad(cx+31*unit,top,unit,107*unit,primary);
+                }
+                default -> { }
+            }
+        } else if (combat || esp.mode.get() == ESP.Mode.Hologram || esp.mode.get() == ESP.Mode.Constellation) {
             if (combat ? effects.targetOrbit.get() : esp.groundMarker.get()) ellipse(r, cx, top + 108 * unit, 53 * unit, 12 * unit, phase, primary, true);
             if (combat ? effects.scanBand.get() : esp.mode.get() == ESP.Mode.Hologram)
                 ellipse(r, cx, top + (55 + Math.sin(phase * 2) * 43) * unit, 41 * unit, 9 * unit, 0, primary, false);

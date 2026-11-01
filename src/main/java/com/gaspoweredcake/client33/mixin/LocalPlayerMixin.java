@@ -26,6 +26,9 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.ClientInput;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import com.gaspoweredcake.client33.systems.modules.render.NoRender;
 import net.minecraft.world.entity.PlayerRideableJumping;
 import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.phys.EntityHitResult;
@@ -45,12 +48,6 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
 
     public LocalPlayerMixin(ClientLevel world, GameProfile profile) {
         super(world, profile);
-    }
-
-    @Inject(method = "drop", at = @At("HEAD"), cancellable = true)
-    private void onDrop(boolean all, CallbackInfoReturnable<Boolean> cir) {
-        if (Client33.EVENT_BUS.post(DropItemsEvent.get(getMainHandItem())).isCancelled())
-            cir.setReturnValue(false);
     }
 
     @ModifyExpressionValue(method = "handlePortalTransitionEffect", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;screen()Lnet/minecraft/client/gui/screens/Screen;", ordinal = 0))
@@ -86,7 +83,7 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
         }
     }
 
-    @ModifyExpressionValue(method = "tick", at = @At(value = "FIELD", target = "Lnet/minecraft/client/player/ClientInput;keyPresses:Lnet/minecraft/world/entity/player/Input;", opcode = Opcodes.GETFIELD))
+    @ModifyExpressionValue(method = "sendChanges", at = @At(value = "FIELD", target = "Lnet/minecraft/client/player/ClientInput;keyPresses:Lnet/minecraft/world/entity/player/Input;", opcode = Opcodes.GETFIELD))
     private Input isSneaking(Input original) {
         if (Modules.get().get(Sneak.class).doPacket() || Modules.get().get(NoSlow.class).airStrict()) {
             return new Input(
@@ -172,7 +169,7 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
         Client33.EVENT_BUS.post(SendMovementPacketsEvent.Pre.get());
     }
 
-    @Inject(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientPacketListener;send(Lnet/minecraft/network/protocol/Packet;)V", ordinal = 1))
+    @Inject(method = "sendChanges", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientPacketListener;send(Lnet/minecraft/network/protocol/Packet;)V", ordinal = 1))
     private void onTickHasVehicleBeforeSendPackets(CallbackInfo ci) {
         Client33.EVENT_BUS.post(SendMovementPacketsEvent.Pre.get());
     }
@@ -182,8 +179,16 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
         Client33.EVENT_BUS.post(SendMovementPacketsEvent.Post.get());
     }
 
-    @Inject(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientPacketListener;send(Lnet/minecraft/network/protocol/Packet;)V", ordinal = 1, shift = At.Shift.AFTER))
+    @Inject(method = "sendChanges", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientPacketListener;send(Lnet/minecraft/network/protocol/Packet;)V", ordinal = 1, shift = At.Shift.AFTER))
     private void onTickHasVehicleAfterSendPackets(CallbackInfo ci) {
         Client33.EVENT_BUS.post(SendMovementPacketsEvent.Post.get());
     }
+    @Inject(method = "displayItemActivation", at = @At("HEAD"), cancellable = true)
+    private void onDisplayItemActivation(ItemStack itemStack, CallbackInfo ci) {
+        if (itemStack.getItem() == Items.TOTEM_OF_UNDYING && Modules.get().get(NoRender.class).noTotemAnimation()) {
+            ci.cancel();
+        }
+    }
+
+
 }

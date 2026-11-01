@@ -74,12 +74,21 @@ public abstract class SodiumDefaultFluidRendererMixin {
         return !otherState.getFluidState().getType().isSame(fluid.getType());
     }
 
-    @ModifyReturnValue(method = "isFluidSideExposed(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;F)Z", at = @At("RETURN"))
+    @ModifyReturnValue(method = "isFluidSideExposed(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;F)Z", at = @At("RETURN"), require = 0)
     private boolean onIsFluidSideExposed(boolean original, BlockState ownBlockState, BlockState neighborBlockState, Direction facing, float height) {
         if (original || !forceXrayFluidSides || facing.getAxis().isVertical()) return original;
         if (!xray.isBlocked(neighborBlockState.getBlock(), null)) return false;
 
         return !neighborBlockState.getFluidState().getType().isSame(ownBlockState.getFluidState().getType());
+    }
+
+    @ModifyReturnValue(method = "isFluidSideExposed(Lnet/minecraft/client/renderer/block/BlockAndTintGetter;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;F)Z", at = @At("RETURN"), require = 0)
+    private boolean client33$fluidSideExposed093(boolean original, BlockAndTintGetter level,
+            BlockState ownState, BlockPos neighborPos, Direction facing, float height) {
+        if (original || !forceXrayFluidSides || facing.getAxis().isVertical()) return original;
+        BlockState neighbor = level.getBlockState(neighborPos);
+        return xray.isBlocked(neighbor.getBlock(), null)
+            && !neighbor.getFluidState().getType().isSame(ownState.getFluidState().getType());
     }
 
     @Inject(method = "getUpFaceExposureByNeighbors", at = @At("HEAD"), cancellable = true)

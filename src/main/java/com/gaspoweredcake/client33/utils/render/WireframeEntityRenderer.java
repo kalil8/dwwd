@@ -16,13 +16,13 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
 import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.renderer.texture.UvMapping;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import static com.gaspoweredcake.client33.Client33.mc;
 
@@ -35,12 +35,27 @@ public class WireframeEntityRenderer {
     private static Color lineColor;
     private static ShapeMode shapeMode;
     private static double offsetX, offsetY, offsetZ;
+    private static java.util.List<SurfaceMesh.Face> captured;
+
+    public static SurfaceMesh capture(Render3DEvent event, Entity entity) { return capture(event,entity,null); }
+
+    public static SurfaceMesh capture(Render3DEvent event,Entity entity,@Nullable EntityRenderState state) {
+        captured = new java.util.ArrayList<>();
+        try {
+            renderModel(event, entity, 1, Color.WHITE, Color.WHITE, ShapeMode.Sides,state);
+            return new SurfaceMesh(captured);
+        } finally { captured = null; }
+    }
 
     private WireframeEntityRenderer() {
     }
 
-    @SuppressWarnings("unchecked")
     public static void render(Render3DEvent event, Entity entity, double scale, Color sideColor, Color lineColor, ShapeMode shapeMode) {
+        renderModel(event,entity,scale,sideColor,lineColor,shapeMode,null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void renderModel(Render3DEvent event,Entity entity,double scale,Color sideColor,Color lineColor,ShapeMode shapeMode,@Nullable EntityRenderState suppliedState) {
         WireframeEntityRenderer.renderer = event.renderer;
         WireframeEntityRenderer.sideColor = sideColor;
         WireframeEntityRenderer.lineColor = lineColor;
@@ -53,19 +68,24 @@ public class WireframeEntityRenderer {
         offsetZ = Mth.lerp(tickDelta, entity.zOld, entity.getZ());
 
         var entityRenderer = (EntityRenderer<Entity, EntityRenderState>) mc.getEntityRenderDispatcher().getRenderer(entity);
-        var state = entityRenderer.createRenderState(entity, tickDelta);
+        var state = suppliedState==null?entityRenderer.createRenderState(entity,tickDelta):suppliedState;
+        if(suppliedState!=null) {offsetX=state.x;offsetY=state.y;offsetZ=state.z;}
 
         Vec3 entityOffset = entityRenderer.getRenderOffset(state);
         offsetX += entityOffset.x;
         offsetY += entityOffset.y;
         offsetZ += entityOffset.z;
 
+        interceptStorage.vertexConsumer.i = 0;
         matrices.pushPose();
-        matrices.scale((float) scale, (float) scale, (float) scale);
-        entityRenderer.submit(state, matrices, interceptStorage, mc.gameRenderer.gameRenderState().levelRenderState.cameraRenderState);
-        matrices.popPose();
-
-        interceptStorage.clear();
+        try {
+            matrices.scale((float) scale, (float) scale, (float) scale);
+            entityRenderer.submit(state, matrices, interceptStorage, mc.gameRenderer.gameRenderState().levelRenderState.cameraRenderState);
+        } finally {
+            matrices.popPose();
+            interceptStorage.vertexConsumer.i = 0;
+            interceptStorage.clear();
+        }
     }
 
     private static class InterceptingStorage extends SubmitNodeStorage {
@@ -80,9 +100,8 @@ public class WireframeEntityRenderer {
             int lightCoords,
             int overlayCoords,
             int tintedColor,
-            TextureAtlasSprite sprite,
-            int outlineColor,
-            ModelFeatureRenderer.CrumblingOverlay crumblingOverlay
+            UvMapping sprite,
+            int outlineColor
         ) {
             if (renderType.isOutline()) return;
 
@@ -113,7 +132,13 @@ public class WireframeEntityRenderer {
             ys[i] = y;
             zs[i] = z;
             if (++i == 4) {
-                renderer.side(
+                if (captured != null) {
+                    if (captured.size() < SurfaceMesh.MAX_FACES) captured.add(new SurfaceMesh.Face(
+                        new SurfaceMesh.Point(offsetX+xs[0], offsetY+ys[0], offsetZ+zs[0]),
+                        new SurfaceMesh.Point(offsetX+xs[1], offsetY+ys[1], offsetZ+zs[1]),
+                        new SurfaceMesh.Point(offsetX+xs[2], offsetY+ys[2], offsetZ+zs[2]),
+                        new SurfaceMesh.Point(offsetX+xs[3], offsetY+ys[3], offsetZ+zs[3])));
+                } else renderer.side(
                     offsetX + xs[0], offsetY + ys[0], offsetZ + zs[0],
                     offsetX + xs[1], offsetY + ys[1], offsetZ + zs[1],
                     offsetX + xs[2], offsetY + ys[2], offsetZ + zs[2],
@@ -151,6 +176,9 @@ public class WireframeEntityRenderer {
         public @NonNull VertexConsumer setUv2(int u, int v) {
             return this;
         }
+
+        @Override
+        public @NonNull VertexConsumer setUv3(float u, float v) { return this; }
 
         @Override
         public @NonNull VertexConsumer setNormal(float x, float y, float z) {

@@ -5,8 +5,7 @@
 
 package com.gaspoweredcake.client33.systems.accounts.types;
 
-import com.mojang.authlib.Environment;
-import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
+import com.gaspoweredcake.client33.systems.accounts.LegacyAccountServices;
 import com.mojang.util.UndashedUuid;
 import com.gaspoweredcake.client33.Client33;
 import com.gaspoweredcake.client33.systems.accounts.Account;
@@ -23,8 +22,6 @@ import java.util.UUID;
 import static com.gaspoweredcake.client33.Client33.mc;
 
 public class TheAlteningAccount extends Account<TheAlteningAccount> implements TokenAccount {
-    private static final Environment ENVIRONMENT = new Environment("http://sessionserver.thealtening.com", "http://authserver.thealtening.com", "https://api.mojang.com", "The Altening");
-    private static final YggdrasilAuthenticationService SERVICE = new YggdrasilAuthenticationService(mc.getProxy(), ENVIRONMENT);
     private String token;
     private String accessToken;
 
@@ -57,9 +54,8 @@ public class TheAlteningAccount extends Account<TheAlteningAccount> implements T
     @Override
     public boolean login() {
         if (accessToken == null || cache.username.isEmpty() || cache.uuid.isEmpty()) return false;
-        applyLoginEnvironment(SERVICE);
-
         try {
+            applyLoginEnvironment(LegacyAccountServices.create(mc.getProxy()));
             setSession(new User(cache.username, UndashedUuid.fromStringLenient(cache.uuid), accessToken, Optional.empty(), Optional.empty()));
             return true;
         } catch (Exception _) {
@@ -69,7 +65,7 @@ public class TheAlteningAccount extends Account<TheAlteningAccount> implements T
     }
 
     private AuthResponse authenticate() {
-        return Http.post(ENVIRONMENT.servicesHost() + "/authenticate")
+        return Http.post(LegacyAccountServices.AUTHENTICATION + "/authenticate")
             .bodyJson(new AuthRequest("MINECRAFT", token, "Client33 on Crack!", UUID.randomUUID().toString(), true))
             .sendJson(AuthResponse.class);
     }

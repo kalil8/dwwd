@@ -30,8 +30,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.ArrayDeque;
+import net.minecraft.client.multiplayer.ClientLevel;
 
 public class BlockESP extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -80,7 +80,8 @@ public class BlockESP extends Module {
 
     private final Long2ObjectMap<ESPChunk> chunks = new Long2ObjectOpenHashMap<>();
     private final Set<ESPGroup> groups = new ReferenceOpenHashSet<>();
-    private final ExecutorService workerThread = Executors.newSingleThreadExecutor();
+    private final ArrayDeque<ChunkAccess> pendingChunks = new ArrayDeque<>();
+    private ClientLevel scanWorld;
 
     private DimensionType lastDimension;
 
@@ -93,10 +94,12 @@ public class BlockESP extends Module {
     @Override
     public void onActivate() {
         synchronized (chunks) {
+            pendingChunks.clear();
             chunks.clear();
             groups.clear();
         }
 
+        scanWorld = mc.level;
         for (ChunkAccess chunk : Utils.chunks()) {
             searchChunk(chunk);
         }
@@ -107,6 +110,7 @@ public class BlockESP extends Module {
     @Override
     public void onDeactivate() {
         synchronized (chunks) {
+            pendingChunks.clear();
             chunks.clear();
             groups.clear();
         }
@@ -159,28 +163,37 @@ public class BlockESP extends Module {
     }
 
     private void searchChunk(ChunkAccess chunk) {
-        workerThread.submit(() -> {
-            if (!isActive()) return;
-            ESPChunk schunk = ESPChunk.searchChunk(chunk, blocks.get());
+        pendingChunks.removeIf(queued -> queued.getPos().equals(chunk.getPos()));
+        pendingChunks.addLast(chunk);
+    }
 
-            if (schunk.size() > 0) {
-                synchronized (chunks) {
-                    chunks.put(chunk.getPos().pack(), schunk);
-                    schunk.update();
-
-                    // Update neighbour chunks
-                    updateChunk(chunk.getPos().x() - 1, chunk.getPos().z());
-                    updateChunk(chunk.getPos().x() + 1, chunk.getPos().z());
-                    updateChunk(chunk.getPos().x(), chunk.getPos().z() - 1);
-                    updateChunk(chunk.getPos().x(), chunk.getPos().z() + 1);
+    private void scanNextChunk() {
+        ChunkAccess chunk = pendingChunks.pollFirst();
+        if (chunk == null || !isActive() || scanWorld != mc.level
+            || mc.level.getChunk(chunk.getPos().x(), chunk.getPos().z(), net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) != chunk) return;
+        ESPChunk schunk = ESPChunk.searchChunk(chunk, blocks.get());
+        synchronized (chunks) {
+            ESPChunk old = chunks.remove(chunk.getPos().pack());
+            if (old != null && old.blocks != null) {
+                for (ESPBlock block : old.blocks.values()) {
+                    block.group.remove(block, false);
+                    block.loaded = false;
                 }
             }
-        });
+            if (schunk.size() > 0) {
+                chunks.put(chunk.getPos().pack(), schunk);
+                schunk.update();
+            }
+            updateChunk(chunk.getPos().x() - 1, chunk.getPos().z());
+            updateChunk(chunk.getPos().x() + 1, chunk.getPos().z());
+            updateChunk(chunk.getPos().x(), chunk.getPos().z() - 1);
+            updateChunk(chunk.getPos().x(), chunk.getPos().z() + 1);
+        }
     }
 
     @EventHandler
     private void onBlockUpdate(BlockUpdateEvent event) {
-        // Minecraft probably reuses the event.pos BlockPos instance because it causes problems when trying to use it inside another thread
+        // Copy the borrowed event position before updating neighbour geometry.
         int bx = event.pos.getX();
         int by = event.pos.getY();
         int bz = event.pos.getZ();
@@ -193,34 +206,32 @@ public class BlockESP extends Module {
         boolean removed = !added && !blocks.get().contains(event.newState.getBlock()) && blocks.get().contains(event.oldState.getBlock());
 
         if (added || removed) {
-            workerThread.submit(() -> {
-                synchronized (chunks) {
-                    ESPChunk chunk = chunks.get(key);
+            synchronized (chunks) {
+                ESPChunk chunk = chunks.get(key);
 
-                    if (chunk == null) {
-                        chunk = new ESPChunk(chunkX, chunkZ);
-                        if (chunk.shouldBeDeleted()) return;
+                if (chunk == null) {
+                    chunk = new ESPChunk(chunkX, chunkZ);
+                    if (chunk.shouldBeDeleted()) return;
 
-                        chunks.put(key, chunk);
-                    }
+                    chunks.put(key, chunk);
+                }
 
-                    blockPos.set(bx, by, bz);
+                blockPos.set(bx, by, bz);
 
-                    if (added) chunk.add(blockPos);
-                    else chunk.remove(blockPos);
+                if (added) chunk.add(blockPos);
+                else chunk.remove(blockPos);
 
-                    // Update neighbour blocks
-                    for (int x = -1; x < 2; x++) {
-                        for (int z = -1; z < 2; z++) {
-                            for (int y = -1; y < 2; y++) {
-                                if (x == 0 && y == 0 && z == 0) continue;
+                // Update neighbour blocks
+                for (int x = -1; x < 2; x++) {
+                    for (int z = -1; z < 2; z++) {
+                        for (int y = -1; y < 2; y++) {
+                            if (x == 0 && y == 0 && z == 0) continue;
 
-                                updateBlock(bx + x, by + y, bz + z);
-                            }
+                            updateBlock(bx + x, by + y, bz + z);
                         }
                     }
                 }
-            });
+            }
         }
     }
 
@@ -228,7 +239,8 @@ public class BlockESP extends Module {
     private void onPostTick(TickEvent.Post event) {
         DimensionType dimension = mc.level.dimensionType();
 
-        if (lastDimension != dimension) onActivate();
+        if (lastDimension != dimension || scanWorld != mc.level) onActivate();
+        scanNextChunk();
         lastDimension = dimension;
     }
 
@@ -239,12 +251,10 @@ public class BlockESP extends Module {
                 ESPChunk chunk = it.next();
 
                 if (chunk.shouldBeDeleted()) {
-                    workerThread.submit(() -> {
-                        for (ESPBlock block : chunk.blocks.values()) {
-                            block.group.remove(block, false);
-                            block.loaded = false;
-                        }
-                    });
+                    for (ESPBlock block : chunk.blocks.values()) {
+                        block.group.remove(block, false);
+                        block.loaded = false;
+                    }
 
                     it.remove();
                 } else chunk.render(event);

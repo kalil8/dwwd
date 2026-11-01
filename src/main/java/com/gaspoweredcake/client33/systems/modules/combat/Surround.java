@@ -27,7 +27,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ClientboundPlayerCombatKillPacket;
 import net.minecraft.network.protocol.game.ServerboundAttackPacket;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundPunchPacket;
 import net.minecraft.server.level.BlockDestructionProgress;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -401,7 +401,7 @@ public class Surround extends Module {
                         || !box.intersects(crystal.getBoundingBox())
                         || DamageUtils.crystalDamage(owner, crystal.position()) >= PlayerUtils.getTotalHealth()) return;
                     owner.connection.send(new ServerboundAttackPacket(crystal.getId()));
-                    owner.connection.send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
+                    owner.connection.send(ServerboundPunchPacket.INSTANCE);
                 };
                 if (rotate.get()) Rotations.rotate(Rotations.getYaw(crystal), Rotations.getPitch(crystal), attack);
                 else attack.run();

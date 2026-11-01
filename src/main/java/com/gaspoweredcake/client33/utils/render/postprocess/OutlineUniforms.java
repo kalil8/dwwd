@@ -5,10 +5,10 @@
 
 package com.gaspoweredcake.client33.utils.render.postprocess;
 
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.buffers.Std140SizeCalculator;
-import net.minecraft.client.renderer.DynamicUniformStorage;
+import com.gaspoweredcake.client33.renderer.DynamicUniformStorage;
 import org.jspecify.annotations.NonNull;
 
 import java.nio.ByteBuffer;

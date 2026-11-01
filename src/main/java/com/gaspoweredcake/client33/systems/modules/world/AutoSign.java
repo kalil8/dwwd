@@ -34,7 +34,7 @@ public class AutoSign extends Module {
         .build()
     );
 
-    private String[] text;
+    private java.util.List<String> text;
 
     // Some servers (e.g., 2b2t) don't like the sign packet being sent too soon after the swing or block click packets, so queue them.
     // Delaying by sleeping in the event handler may be fine for a single sign, but would visibly lag the UI at a larger scale.
@@ -74,7 +74,7 @@ public class AutoSign extends Module {
     private void onSendPacket(PacketEvent.Send event) {
         if (!(event.packet instanceof ServerboundSignUpdatePacket)) return;
 
-        text = ((ServerboundSignUpdatePacket) event.packet).getLines();
+        text = ((ServerboundSignUpdatePacket) event.packet).lines();
     }
 
     @EventHandler
@@ -83,7 +83,7 @@ public class AutoSign extends Module {
 
         SignBlockEntity sign = ((AbstractSignEditScreenAccessor) event.screen).client33$getSign();
 
-        queue.add(new ServerboundSignUpdatePacket(sign.getBlockPos(), true, text[0], text[1], text[2], text[3]));
+        queue.add(new ServerboundSignUpdatePacket(sign.getBlockPos(), text, net.minecraft.world.level.block.entity.SignTextSlot.FRONT));
 
         event.cancel();
     }

@@ -54,7 +54,7 @@ public class MicrosoftLogin {
                     .login(DeviceCodeMsaAuthService::new, (Consumer<MsaDeviceCode>) deviceCode -> {
                         String urlString = deviceCode.getDirectVerificationUri();
                         urlFuture.complete(urlString);
-                        Util.getPlatform().openUri(urlString);
+                        com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create(urlString));
                     });
 
                 MsaToken msaToken = authManager.getMsaToken().getUpToDate();

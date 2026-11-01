@@ -288,7 +288,7 @@ public class DiscordPresence extends Module {
     @Override
     public WWidget getWidget(GuiTheme theme) {
         WButton help = theme.button("Open documentation.");
-        help.action = () -> Util.getPlatform().openUri("https://github.com/GasPoweredCake/33");
+        help.action = () -> com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create("https://github.com/GasPoweredCake/33"));
 
         return help;
     }

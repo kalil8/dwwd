@@ -16,6 +16,7 @@ import com.gaspoweredcake.client33.gui.utils.Cell;
 import com.gaspoweredcake.client33.gui.widgets.WKeybind;
 import com.gaspoweredcake.client33.gui.widgets.WWidget;
 import com.gaspoweredcake.client33.gui.widgets.input.WTextBox;
+import com.gaspoweredcake.client33.gui.widgets.input.WDropdown;
 import com.gaspoweredcake.client33.gui.widgets.containers.WContainer;
 import com.gaspoweredcake.client33.gui.widgets.containers.WHorizontalList;
 import com.gaspoweredcake.client33.gui.widgets.containers.WSection;
@@ -40,6 +41,7 @@ public class ModuleScreen extends WindowScreen {
     private WKeybind keybind;
     private WCheckbox active;
     private String settingsQuery = "";
+    private String settingsGroup;
 
     public ModuleScreen(GuiTheme theme, Module module) {
         super(theme, theme.favorite(module.favorite), module.title);
@@ -47,6 +49,7 @@ public class ModuleScreen extends WindowScreen {
         ((WFavorite) window.icon).action = () -> module.favorite = ((WFavorite) window.icon).checked;
 
         this.module = module;
+        settingsGroup=module.settings.groups.isEmpty()?null:module.settings.groups.getFirst().name;
     }
 
     @Override
@@ -69,13 +72,18 @@ public class ModuleScreen extends WindowScreen {
         controls.add(theme.button("Back to modules")).expandCellX().right().widget().action = this::onClose;
 
         if (!module.settings.groups.isEmpty()) {
+            String[] groups=new String[module.settings.groups.size()+1];groups[0]="All settings";
+            for(int i=0;i<module.settings.groups.size();i++)groups[i+1]=module.settings.groups.get(i).name;
+            WHorizontalList navigation=add(theme.horizontalList()).expandX().widget();
+            navigation.add(theme.label("Section"));
+            WDropdown<String> groupPicker=navigation.add(theme.dropdown(groups,settingsGroup==null?groups[0]:settingsGroup)).expandX().widget();
+            groupPicker.action=()->{settingsGroup=groupPicker.get().equals(groups[0])?null:groupPicker.get();refreshSettings();};
             WTextBox search = add(theme.textBox(settingsQuery, "Find a setting...")).expandX().widget();
             settingsContainer = add(theme.verticalList()).expandX().widget();
-            settingsContainer.add(theme.settings(module.settings, settingsQuery)).expandX();
+            refreshSettings();
             search.action = () -> {
                 settingsQuery = search.get();
-                settingsContainer.clear();
-                settingsContainer.add(theme.settings(module.settings, settingsQuery)).expandX();
+                refreshSettings();
             };
         }
 
@@ -142,6 +150,13 @@ public class ModuleScreen extends WindowScreen {
         paste.tooltip = "Paste config";
     }
 
+    private String visibleGroup() { return settingsQuery.isBlank()?settingsGroup:null; }
+    private void refreshSettings() {
+        if(settingsContainer==null)return;
+        settingsContainer.clear();
+        settingsContainer.add(theme.settings(module.settings,settingsQuery,visibleGroup())).expandX();
+    }
+
     @Override
     public boolean shouldCloseOnEsc() {
         return !Modules.get().isBinding();
@@ -151,7 +166,7 @@ public class ModuleScreen extends WindowScreen {
     public void tick() {
         super.tick();
 
-        module.settings.tick(settingsContainer, theme, settingsQuery);
+        module.settings.tick(settingsContainer, theme, settingsQuery,visibleGroup());
     }
 
     @EventHandler

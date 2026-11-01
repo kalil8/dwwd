@@ -39,8 +39,8 @@ public class SpawnerScanner extends Module {
         if (world != mc.level) clear();
         if (mc.level == null) return;
         if (event.packet() instanceof ClientboundLevelChunkWithLightPacket chunk) {
-            observed.keySet().removeIf(pos -> pos.getX() >> 4 == chunk.getX() && pos.getZ() >> 4 == chunk.getZ());
-            chunk.getChunkData().getBlockEntitiesTagsConsumer(chunk.getX(), chunk.getZ()).accept((pos, type, tag) -> {
+            observed.keySet().removeIf(pos -> pos.getX() >> 4 == chunk.x() && pos.getZ() >> 4 == chunk.z());
+            chunk.chunkData().forEachBlockEntityTag(chunk.x(), chunk.z(), (pos, type, tag) -> {
                 if (type == BlockEntityTypes.MOB_SPAWNER) record(pos, tag);
             });
         } else if (event.packet() instanceof ClientboundBlockEntityDataPacket update && update.getType() == BlockEntityTypes.MOB_SPAWNER) {

@@ -1,8 +1,8 @@
 package com.gaspoweredcake.client33.utils.render;
 
-import com.mojang.blaze3d.GpuFormat;
+import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.blaze3d.platform.TextureUtil;
-import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.FilterMode;
 import com.gaspoweredcake.client33.Client33;
 import com.gaspoweredcake.client33.renderer.Texture;
 import com.gaspoweredcake.client33.utils.network.Http;

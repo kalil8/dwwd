@@ -5,7 +5,7 @@
 
 package com.gaspoweredcake.client33.renderer;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.gaspoweredcake.client33.utils.render.color.Color;
 import com.gaspoweredcake.client33.utils.world.Dir;

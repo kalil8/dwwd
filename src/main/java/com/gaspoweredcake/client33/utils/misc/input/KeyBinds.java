@@ -12,8 +12,8 @@ import net.minecraft.client.KeyMapping;
 public class KeyBinds {
     private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(Client33.identifier("client33"));
 
-    public static KeyMapping OPEN_GUI = new KeyMapping("key.client33.open-gui", InputConstants.Type.KEYSYM, InputConstants.KEY_RSHIFT, CATEGORY);
-    public static KeyMapping OPEN_COMMANDS = new KeyMapping("key.client33.open-commands", InputConstants.Type.KEYSYM, InputConstants.KEY_PERIOD, CATEGORY);
+    public static KeyMapping OPEN_GUI = new KeyMapping("key.client33.open-gui", InputConstants.Type.KEYBOARD, InputConstants.KEY_RSHIFT, CATEGORY);
+    public static KeyMapping OPEN_COMMANDS = new KeyMapping("key.client33.open-commands", InputConstants.Type.KEYBOARD, InputConstants.KEY_PERIOD, CATEGORY);
 
     private KeyBinds() {
     }

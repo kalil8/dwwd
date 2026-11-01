@@ -32,6 +32,10 @@ repositories {
         url = uri("https://repo.viaversion.com")
     }
     mavenCentral()
+    maven {
+        url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+        content { includeGroup("org.inspirenxe") }
+    }
 
     exclusiveContent {
         forRepository {
@@ -76,6 +80,7 @@ dependencies {
     implementation(libs.fabric.loader)
 
     val fapiVersion = libs.versions.fabric.api.get()
+    modInclude("net.fabricmc.fabric-api:fabric-api:$fapiVersion")
     modInclude(fabricApi.module("fabric-api-base", fapiVersion))
     modInclude(fabricApi.module("fabric-resource-loader-v1", fapiVersion))
 
@@ -90,7 +95,25 @@ dependencies {
     compileOnly(libs.baritone)
     compileOnly(libs.modmenu)
 
+    // October 2026 Fabric release: records received chunks for extended terrain and ESP.
+    modInclude("maven.modrinth:bobby:J7YnfCss") { isTransitive = false }
+
+    // Strata includes its API, SPI and core as nested jars.
+    modInclude("org.inspirenxe:strata-minecraft-fabric:0.1.0-20261027.015835-7")
+    compileOnly("org.inspirenxe:strata-api:0.1.0-20261027.000854-11")
+
     // Libraries (JAR-in-JAR)
+    // Minecraft moved to SDL; existing import/export dialogs still require tinyfd.
+    jij("org.lwjgl:lwjgl-tinyfd:3.4.3") { isTransitive = false }
+    listOf("linux", "linux-arm64", "windows", "windows-arm64", "macos", "macos-arm64").forEach { platform ->
+        val nativeDialog = "org.lwjgl:lwjgl-tinyfd:3.4.3:natives-$platform"
+        runtimeOnly(nativeDialog) { isTransitive = false }
+        include(nativeDialog) { isTransitive = false }
+    }
+    jij("io.github.humbleui:skija-shared:0.143.18")
+    listOf("linux-x64", "linux-arm64", "windows-x64", "macos-x64", "macos-arm64").forEach { platform ->
+        jij("io.github.humbleui:skija-$platform:0.143.18") { isTransitive = false }
+    }
     jij(libs.orbit)
     jij(libs.starscript)
     jij(libs.discord.ipc)

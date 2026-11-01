@@ -194,8 +194,8 @@ public final class IntelBus {
             ArrayList<BlockPos> one = new ArrayList<>(1);
             section.runUpdates((pos, state) -> { invalidateBlockEntity(pos, state); if (one.isEmpty()) one.add(pos.immutable()); });
             if (!one.isEmpty()) changed(one.getFirst());
-        } else if (event.packet() instanceof ClientboundLightUpdatePacket light && mc.level.hasChunk(light.getX(), light.getZ())) {
-            LevelChunk chunk = mc.level.getChunk(light.getX(), light.getZ());
+        } else if (event.packet() instanceof ClientboundLightUpdatePacket light && mc.level.hasChunk(light.x(), light.z())) {
+            LevelChunk chunk = mc.level.getChunk(light.x(), light.z());
             for (int i = 0; i < chunk.getSections().length; i++) enqueue(chunk, chunk.getSectionYFromSectionIndex(i));
         }
     }
@@ -458,8 +458,8 @@ public final class IntelBus {
         if (world != mc.level) reset();
         if (mc.level == null) return;
         if (event.packet() instanceof ClientboundLevelChunkWithLightPacket chunk) {
-            blockEntities.keySet().removeIf(pos -> pos.getX() >> 4 == chunk.getX() && pos.getZ() >> 4 == chunk.getZ());
-            chunk.getChunkData().getBlockEntitiesTagsConsumer(chunk.getX(), chunk.getZ()).accept(this::observedBlockEntity);
+            blockEntities.keySet().removeIf(pos -> pos.getX() >> 4 == chunk.x() && pos.getZ() >> 4 == chunk.z());
+            chunk.chunkData().forEachBlockEntityTag(chunk.x(), chunk.z(), this::observedBlockEntity);
         } else if (event.packet() instanceof ClientboundBlockEntityDataPacket block) {
             observedBlockEntity(block.getPos(), block.getType(), block.getTag());
         } else if (event.packet() instanceof ClientboundForgetLevelChunkPacket unload) {

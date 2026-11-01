@@ -17,12 +17,17 @@ public class ModulesTab extends Tab {
     }
 
     @Override
+    public void openScreen(GuiTheme theme) {
+        com.gaspoweredcake.client33.gui.screens.StrataWorkspace.open();
+    }
+
+    @Override
     public TabScreen createScreen(GuiTheme theme) {
         return theme.modulesScreen();
     }
 
     @Override
     public boolean isScreen(Screen screen) {
-        return GuiThemes.get().isModulesScreen(screen);
+        return com.gaspoweredcake.client33.gui.screens.StrataWorkspace.isScreen(screen) || GuiThemes.get().isModulesScreen(screen);
     }
 }

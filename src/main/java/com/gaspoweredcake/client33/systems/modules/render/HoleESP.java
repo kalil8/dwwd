@@ -21,11 +21,10 @@ import com.gaspoweredcake.client33.utils.world.BlockIterator;
 import com.gaspoweredcake.client33.utils.world.Dir;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.BlockPos;
+import com.gaspoweredcake.client33.utils.intel.SectionSnapshot;
 import net.minecraft.core.Direction;
-import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -181,7 +180,7 @@ public class HoleESP extends Module {
             for (Direction direction : Direction.values()) {
                 if (direction == Direction.UP) continue;
                 BlockPos offsetPos = blockPos.relative(direction);
-                Block block = mc.level.getBlockState(offsetPos).getBlock();
+                Block block = SectionSnapshot.live(mc.level, offsetPos).getBlock();
                 boolean breakable = block.defaultDestroyTime() >= 0;
 
                 if (((BlockBehaviourAccessor) block).client33$isHasCollision() && !breakable) bedrock++;
@@ -191,7 +190,7 @@ public class HoleESP extends Module {
                     for (Direction dir : Direction.values()) {
                         if (dir == direction.getOpposite() || dir == Direction.UP) continue;
 
-                        block = mc.level.getBlockState(offsetPos.relative(dir)).getBlock();
+                        block = SectionSnapshot.live(mc.level, offsetPos.relative(dir)).getBlock();
                         breakable = block.defaultDestroyTime() >= 0;
 
                         if (((BlockBehaviourAccessor) block).client33$isHasCollision() && !breakable) bedrock++;
@@ -214,14 +213,13 @@ public class HoleESP extends Module {
     private boolean validHole(BlockPos pos) {
         if (ignoreOwn.get() && mc.player.blockPosition().equals(pos)) return false;
 
-        LevelChunk chunk = mc.level.getChunk(SectionPos.posToSectionCoord(pos.getX()), SectionPos.posToSectionCoord(pos.getZ()));
-        Block block = chunk.getBlockState(pos).getBlock();
+        Block block = SectionSnapshot.live(mc.level, pos).getBlock();
         if (!webs.get() && block == Blocks.COBWEB) return false;
 
         if (((BlockBehaviourAccessor) block).client33$isHasCollision()) return false;
 
         for (int i = 0; i < holeHeight.get(); i++) {
-            if (((BlockBehaviourAccessor) chunk.getBlockState(pos.above(i)).getBlock()).client33$isHasCollision())
+            if (((BlockBehaviourAccessor) SectionSnapshot.live(mc.level, pos.above(i)).getBlock()).client33$isHasCollision())
                 return false;
         }
 

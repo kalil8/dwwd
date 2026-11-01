@@ -105,11 +105,11 @@ public class Client33GuiTheme extends GuiTheme {
     // Text
 
     public final Setting<SettingColor> textColor = color(sgTextColors, "text", "Color of text.", new SettingColor(230, 237, 247));
-    public final Setting<SettingColor> textSecondaryColor = color(sgTextColors, "text-secondary-text", "Color of secondary text.", new SettingColor(157, 154, 166));
+    public final Setting<SettingColor> textSecondaryColor = color(sgTextColors, "text-secondary-text", "Color of secondary text.", new SettingColor(185, 192, 207));
     public final Setting<SettingColor> textHighlightColor = color(sgTextColors, "text-highlight", "Color of text highlighting.", new SettingColor(245, 66, 85, 110));
     public final Setting<SettingColor> titleTextColor = color(sgTextColors, "title-text", "Color of title text.", new SettingColor(255, 229, 231));
     public final Setting<SettingColor> loggedInColor = color(sgTextColors, "logged-in-text", "Color of logged in account name.", new SettingColor(245, 66, 85));
-    public final Setting<SettingColor> placeholderColor = color(sgTextColors, "placeholder", "Color of placeholder text.", new SettingColor(157, 154, 166, 145));
+    public final Setting<SettingColor> placeholderColor = color(sgTextColors, "placeholder", "Color of placeholder text.", new SettingColor(185, 192, 207, 210));
 
     // Background
 

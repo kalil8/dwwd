@@ -21,12 +21,22 @@ import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.io.File;
 
 @Mixin(Options.class)
 public abstract class OptionsMixin {
+    @ModifyArg(method = "<init>",
+        slice = @Slice(from = @At(value = "CONSTANT", args = "stringValue=options.renderDistance")),
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/OptionInstance$IntRange;<init>(IIZ)V", ordinal = 0),
+        index = 1)
+    private int client33$extendRenderDistance(int maximum) {
+        return Math.max(maximum, 300);
+    }
+
     @Shadow
     @Final
     @Mutable

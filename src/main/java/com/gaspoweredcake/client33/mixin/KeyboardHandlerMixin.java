@@ -35,21 +35,15 @@ public abstract class KeyboardHandlerMixin {
     public void onKey(long handle, int action, KeyEvent event, CallbackInfo ci) {
         int modifiers = event.modifiers();
         if (event.key() != InputConstants.UNKNOWN.getValue()) {
-            // on Linux/X11 the modifier is not active when the key is pressed and still active when the key is released
-            // https://github.com/glfw/glfw/issues/1630
-            if (action == InputConstants.PRESS) {
-                modifiers |= Input.getModifier(event.key());
-            } else if (action == InputConstants.RELEASE) {
-                modifiers &= ~Input.getModifier(event.key());
-            }
-
+            // SDL supplies the current left/right modifier state with the event.
             if (minecraft.gui.screen() instanceof WidgetScreen widgetScreen && action == InputConstants.REPEAT) {
-                widgetScreen.keyRepeated(new KeyEvent(event.key(), event.scancode(), modifiers));
+                widgetScreen.keyRepeated(new KeyEvent(event.key(), event.keycode(), modifiers));
             }
 
+            // Keep releases accurate while widgets suppress shortcut dispatch.
+            Input.setKeyState(event.key(), action != InputConstants.RELEASE);
             if (GuiKeyEvents.canUseKeys) {
-                Input.setKeyState(event.key(), action != InputConstants.RELEASE);
-                if (Client33.EVENT_BUS.post(KeyInputEvent.get(new KeyEvent(event.key(), event.scancode(), modifiers), KeyAction.get(action))).isCancelled())
+                if (Client33.EVENT_BUS.post(KeyInputEvent.get(new KeyEvent(event.key(), event.keycode(), modifiers), KeyAction.get(action))).isCancelled())
                     ci.cancel();
             }
         }

@@ -72,7 +72,7 @@ public class Swarm extends Module {
         stop.action = this::close;
 
         WButton guide = list.add(theme.button("Guide")).expandX().widget();
-        guide.action = () -> Util.getPlatform().openUri("https://github.com/GasPoweredCake/33");
+        guide.action = () -> com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create("https://github.com/GasPoweredCake/33"));
 
         return list;
     }

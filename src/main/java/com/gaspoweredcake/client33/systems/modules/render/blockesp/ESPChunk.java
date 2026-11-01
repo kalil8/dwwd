@@ -9,6 +9,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import com.gaspoweredcake.client33.events.render.Render3DEvent;
 import net.minecraft.core.BlockPos;
+import com.gaspoweredcake.client33.utils.intel.SectionSnapshot;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -98,7 +99,7 @@ public class ESPChunk {
 
                 for (int y = mc.level.getMinY(); y < height; y++) {
                     blockPos.set(x, y, z);
-                    BlockState bs = chunk.getBlockState(blockPos);
+                    BlockState bs = SectionSnapshot.live(mc.level, blockPos);
 
                     if (blocks.contains(bs.getBlock())) schunk.add(blockPos, false);
                 }
