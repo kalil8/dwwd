@@ -92,6 +92,11 @@ public abstract class MultiPlayerGameModeMixin implements IMultiPlayerGameMode {
             cir.setReturnValue(InteractionResult.FAIL);
     }
 
+    @Inject(method = "dropItem", at = @At("HEAD"), cancellable = true)
+    private void onDropItem(LocalPlayer player, boolean all, CallbackInfo ci) {
+        if (Client33.EVENT_BUS.post(DropItemsEvent.get(player.getMainHandItem())).isCancelled()) ci.cancel();
+    }
+
     @Inject(method = "attack", at = @At("HEAD"), cancellable = true)
     private void onAttack(Player player, Entity entity, CallbackInfo ci) {
         if (Client33.EVENT_BUS.post(AttackEntityEvent.get(entity)).isCancelled()) ci.cancel();

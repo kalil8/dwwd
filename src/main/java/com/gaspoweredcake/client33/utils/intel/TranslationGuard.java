@@ -78,7 +78,7 @@ public final class TranslationGuard {
         if (keys.isEmpty()) return;
         if (packet instanceof ClientboundBlockEntityDataPacket data) filterSign(data.getType(), data.getTag(), keys);
         else if (packet instanceof ClientboundLevelChunkWithLightPacket chunk)
-            chunk.getChunkData().getBlockEntitiesTagsConsumer(chunk.getX(), chunk.getZ()).accept((pos, type, tag) -> filterSign(type, tag, keys));
+            chunk.chunkData().forEachBlockEntityTag(chunk.x(), chunk.z(), (pos, type, tag) -> filterSign(type, tag, keys));
     }
     private static void filterSign(BlockEntityType<?> type, CompoundTag tag, Set<String> keys) {
         if (tag == null || (type != BlockEntityTypes.SIGN && type != BlockEntityTypes.HANGING_SIGN)) return;

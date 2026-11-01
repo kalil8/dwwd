@@ -73,6 +73,7 @@ public abstract class GuiRendererMixin {
 
     @Unique
     private void client33$render2D(Minecraft mc) {
+        if (Client33.mc == null || com.gaspoweredcake.client33.systems.modules.Modules.get() == null) return;
         var mouseX = (int) mc.mouseHandler.getScaledXPos(mc.getWindow());
         var mouseY = (int) mc.mouseHandler.getScaledYPos(mc.getWindow());
         if (Utils.canUpdate() || HudEditorScreen.isOpen()) {

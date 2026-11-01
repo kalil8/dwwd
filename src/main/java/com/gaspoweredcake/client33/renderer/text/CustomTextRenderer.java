@@ -36,8 +36,13 @@ public class CustomTextRenderer implements TextRenderer {
         ByteBuffer buffer = fontFace.readToDirectByteBuffer();
 
         fonts = new Font[5];
-        for (int i = 0; i < fonts.length; i++) {
-            fonts[i] = new Font(buffer, (int) Math.round(27 * ((i * 0.5) + 1)));
+        try {
+            for (int i = 0; i < fonts.length; i++) {
+                fonts[i] = new Font(buffer, (int) Math.round(27 * ((i * 0.5) + 1)));
+            }
+        } catch (RuntimeException | Error failure) {
+            for (Font font : fonts) if (font != null) font.texture.close();
+            throw failure;
         }
     }
 

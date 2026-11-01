@@ -1,6 +1,6 @@
 package com.gaspoweredcake.client33.utils.render.postprocess;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.gaspoweredcake.client33.mixininterface.ILevelRenderer;
 import net.minecraft.world.entity.Entity;
 

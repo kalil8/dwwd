@@ -16,6 +16,7 @@ import com.gaspoweredcake.client33.utils.render.color.SettingColor;
 import com.gaspoweredcake.client33.utils.world.Dir;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.BlockPos;
+import com.gaspoweredcake.client33.utils.intel.SectionSnapshot;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -131,7 +132,7 @@ public class VoidESP extends Module {
         ChunkAccess chunk = mc.level.getChunk(blockPos.getX() >> 4, blockPos.getZ() >> 4, ChunkStatus.FULL, false);
         if (chunk == null) return true;
 
-        Block block = chunk.getBlockState(blockPos).getBlock();
+        Block block = SectionSnapshot.live(mc.level, blockPos).getBlock();
 
         if (airOnly.get()) return block != Blocks.AIR;
         return block == Blocks.BEDROCK;

@@ -5,8 +5,8 @@
 
 package com.gaspoweredcake.client33.renderer;
 
-import com.mojang.blaze3d.textures.GpuSampler;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.textures.GpuSampler;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.gaspoweredcake.client33.gui.renderer.packer.TextureRegion;
 import com.gaspoweredcake.client33.utils.PreInit;
 import com.gaspoweredcake.client33.utils.render.color.Color;

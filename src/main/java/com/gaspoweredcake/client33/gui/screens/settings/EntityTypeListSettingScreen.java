@@ -5,7 +5,7 @@
 
 package com.gaspoweredcake.client33.gui.screens.settings;
 
-import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.FilterMode;
 import com.gaspoweredcake.client33.gui.GuiTheme;
 import com.gaspoweredcake.client33.gui.WindowScreen;
 import com.gaspoweredcake.client33.gui.utils.Cell;

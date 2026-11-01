@@ -36,6 +36,10 @@ public abstract class SettingsWidgetFactory {
 
     public abstract WWidget create(GuiTheme theme, Settings settings, String filter);
 
+    public WWidget create(GuiTheme theme, Settings settings, String filter, String groupName) {
+        return create(theme,settings,filter);
+    }
+
     protected Factory getFactory(Class<?> settingClass) {
         if (customFactories.containsKey(settingClass)) return customFactories.get(settingClass).apply(theme);
         return factories.get(settingClass);

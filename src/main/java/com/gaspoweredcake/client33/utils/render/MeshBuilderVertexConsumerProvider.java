@@ -42,6 +42,8 @@ public class MeshBuilderVertexConsumerProvider implements IVertexConsumerProvide
         /**
          * Set texture coordinates
          */
+        public VertexConsumer setUv3(float u, float v) { return this; }
+
         public VertexConsumer setUv(float u, float v) {
             return this;
         }
@@ -136,6 +138,8 @@ public class MeshBuilderVertexConsumerProvider implements IVertexConsumerProvide
          * Set texture coordinates
          */
         @Override
+        public @NonNull VertexConsumer setUv3(float u, float v) { return this; }
+
         public @NonNull VertexConsumer setUv(float u, float v) {
             return this;
         }

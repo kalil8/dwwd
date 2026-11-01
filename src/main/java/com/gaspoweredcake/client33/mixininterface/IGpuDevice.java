@@ -5,7 +5,7 @@
 
 package com.gaspoweredcake.client33.mixininterface;
 
-import com.mojang.blaze3d.systems.RenderPassBackend;
+import com.mojang.renderpearl.backend.api.RenderPassBackend;
 
 public interface IGpuDevice {
     /**

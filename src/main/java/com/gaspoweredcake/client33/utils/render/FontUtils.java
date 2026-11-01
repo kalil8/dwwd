@@ -22,6 +22,10 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -140,14 +144,25 @@ public final class FontUtils {
     }
 
     public static void loadSystem(List<FontFamily> fontList, File dir) {
-        if (!dir.exists() || !dir.isDirectory()) return;
+        loadSystem(fontList, dir, new HashSet<>());
+    }
 
-        File[] files = dir.listFiles(file -> (file.isFile() && file.getName().endsWith(".ttf") || file.isDirectory()));
+    private static void loadSystem(List<FontFamily> fontList, File dir, Set<Path> visited) {
+        if (!dir.exists() || !dir.isDirectory()) return;
+        try {
+            if (!visited.add(dir.toPath().toRealPath())) return;
+        } catch (java.io.IOException | SecurityException e) {
+            Client33.LOG.warn("Cannot inspect font directory {}", dir, e);
+            return;
+        }
+
+        File[] files = dir.listFiles(file -> (file.isFile() && file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".ttf") || file.isDirectory()));
         if (files == null) return;
+        Arrays.sort(files, Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER).thenComparing(File::getName));
 
         for (File file : files) {
             if (file.isDirectory()) {
-                loadSystem(fontList, file);
+                loadSystem(fontList, file, visited);
                 continue;
             }
 
@@ -175,7 +190,7 @@ public final class FontUtils {
 
         FontInfo info = font.info;
 
-        FontFamily family = Fonts.getFamily(info.family());
+        FontFamily family = fontList.stream().filter(f -> f.getName().equalsIgnoreCase(info.family())).findFirst().orElse(null);
         if (family == null) {
             family = new FontFamily(info.family());
             fontList.add(family);

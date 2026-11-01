@@ -5,19 +5,20 @@
 
 package com.gaspoweredcake.client33.systems.modules.render;
 
-import com.mojang.blaze3d.GpuFormat;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.GpuFormat;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.buffers.Std140SizeCalculator;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import it.unimi.dsi.fastutil.ints.IntFloatImmutablePair;
 import com.gaspoweredcake.client33.Client33;
 import com.gaspoweredcake.client33.events.game.ResolutionChangedEvent;
 import com.gaspoweredcake.client33.events.render.RenderAfterWorldEvent;
 import com.gaspoweredcake.client33.gui.WidgetScreen;
+import com.gaspoweredcake.client33.gui.screens.StrataWorkspace;
 import com.gaspoweredcake.client33.renderer.FixedUniformStorage;
 import com.gaspoweredcake.client33.renderer.MeshRenderer;
 import com.gaspoweredcake.client33.renderer.Client33RenderPipelines;
@@ -31,7 +32,7 @@ import meteordevelopment.orbit.listeners.ConsumerListener;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.renderer.DynamicUniformStorage;
+import com.gaspoweredcake.client33.renderer.DynamicUniformStorage;
 import org.jspecify.annotations.NonNull;
 
 import java.nio.ByteBuffer;
@@ -226,13 +227,23 @@ public class Blur extends Module {
             renderToFbo(fbos[i - 1], fbos[i], Client33RenderPipelines.BLUR_UP, ubos[i - 1]);
         }
 
-        // Render output
-        MeshRenderer.begin()
+        // Composite only inside the workspace; the scene outside stays sharp.
+        boolean masked = StrataWorkspace.isOpen();
+        var output = MeshRenderer.begin()
             .attachments(mc.gameRenderer.mainRenderTarget())
-            .pipeline(Client33RenderPipelines.BLUR_PASSTHROUGH)
+            .pipeline(masked ? Client33RenderPipelines.MASKED_GLASS : Client33RenderPipelines.BLUR_PASSTHROUGH)
             .fullscreen()
-            .sampler("u_Texture", fbos[0], RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR)) // todo ???
-            .end();
+            .sampler("u_Texture", fbos[0], RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
+        if (masked) {
+            GLASS_STORAGE.clear();
+            float scaleX = (float) mc.getWindow().getWidth() / mc.getWindow().getGuiScaledWidth();
+            float scaleY = (float) mc.getWindow().getHeight() / mc.getWindow().getGuiScaledHeight();
+            output.uniform("GlassData", GLASS_STORAGE.write(new GlassUniformData(
+                12 * scaleX, 12 * scaleY, mc.getWindow().getWidth() - 24 * scaleX,
+                mc.getWindow().getHeight() - 24 * scaleY, mc.getWindow().getWidth(),
+                mc.getWindow().getHeight(), 12 * Math.min(scaleX, scaleY), (float) progress)));
+        }
+        output.end();
     }
 
     private void renderToFbo(GpuTextureView targetFbo, GpuTextureView sourceTexture, RenderPipeline pipeline, GpuBufferSlice ubo) {
@@ -246,6 +257,7 @@ public class Blur extends Module {
     }
 
     private boolean shouldRender() {
+        if (StrataWorkspace.isOpen()) return true;
         if (!isActive()) return false;
         Screen screen = mc.gui.screen();
 
@@ -272,6 +284,19 @@ public class Blur extends Module {
         }
 
         ubos = UNIFORM_STORAGE.writeAll(uboData);
+    }
+
+    private static final FixedUniformStorage<GlassUniformData> GLASS_STORAGE =
+        new FixedUniformStorage<>("Client33 - Masked glass", 32, 1);
+
+    private record GlassUniformData(float x, float y, float width, float height,
+                                    float screenWidth, float screenHeight, float radius, float opacity)
+        implements DynamicUniformStorage.DynamicUniform {
+        @Override
+        public void write(@NonNull ByteBuffer buffer) {
+            Std140Builder.intoBuffer(buffer).putVec4(x, y, width, height)
+                .putVec4(screenWidth, screenHeight, radius, opacity);
+        }
     }
 
     private static final int UNIFORM_SIZE = new Std140SizeCalculator()

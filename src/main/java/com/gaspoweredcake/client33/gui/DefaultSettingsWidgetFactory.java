@@ -81,13 +81,24 @@ public class DefaultSettingsWidgetFactory extends SettingsWidgetFactory {
 
     @Override
     public WWidget create(GuiTheme theme, Settings settings, String filter) {
+        return create(theme,settings,filter,null);
+    }
+
+    @Override
+    public WWidget create(GuiTheme theme,Settings settings,String filter,String groupName) {
         WVerticalList list = theme.verticalList();
 
         List<RemoveInfo> removeInfoList = new ArrayList<>();
 
         // Add all settings
         for (SettingGroup group : settings.groups) {
-            group(list, group, filter, removeInfoList);
+            if(groupName!=null && !group.name.equals(groupName))continue;
+            if(!filter.isBlank()) {
+                boolean match=false;
+                for(Setting<?> setting:group)if(setting.isVisible() && Strings.CI.contains(setting.title,filter)) {match=true;break;}
+                if(!match)continue;
+            }
+            group(list, group, filter, removeInfoList,groupName!=null);
         }
 
         // Calculate width and set it as minimum width
@@ -107,8 +118,8 @@ public class DefaultSettingsWidgetFactory extends SettingsWidgetFactory {
         return 6;
     }
 
-    private void group(WVerticalList list, SettingGroup group, String filter, List<RemoveInfo> removeInfoList) {
-        WSection section = list.add(theme.section(group.name, group.sectionExpanded)).expandX().widget();
+    private void group(WVerticalList list, SettingGroup group, String filter, List<RemoveInfo> removeInfoList,boolean selected) {
+        WSection section = list.add(theme.section(group.name, selected || group.sectionExpanded)).expandX().widget();
         section.action = () -> group.sectionExpanded = section.isExpanded();
 
         WTable table = section.add(theme.table()).expandX().widget();

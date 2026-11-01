@@ -6,6 +6,7 @@
 package com.gaspoweredcake.client33.systems.modules.combat;
 
 import com.gaspoweredcake.client33.events.packets.PacketEvent;
+import com.gaspoweredcake.client33.events.entity.player.SendMovementPacketsEvent;
 import com.gaspoweredcake.client33.events.world.TickEvent;
 import com.gaspoweredcake.client33.pathing.PathManagers;
 import com.gaspoweredcake.client33.settings.*;
@@ -37,7 +38,7 @@ import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.animal.frog.Frog;
 import net.minecraft.world.entity.animal.parrot.Parrot;
 import net.minecraft.world.entity.animal.wolf.Wolf;
-import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Enderman;
 import net.minecraft.world.entity.monster.Zoglin;
 import net.minecraft.world.entity.monster.hoglin.Hoglin;
 import net.minecraft.world.entity.monster.piglin.Piglin;
@@ -101,7 +102,7 @@ public class KillAura extends Module {
 
     private final Setting<AimMethod> aimMethod = sgGeneral.add(new EnumSetting.Builder<AimMethod>()
         .name("aim-method")
-        .description("Configured Part uses Aim At; Closest Hitbox aims at the nearest interior point of the target bounds.")
+        .description("Choose the configured part, nearest point, or the nearest visible point on the target hitbox.")
         .defaultValue(AimMethod.ConfiguredPart)
         .visible(() -> rotation.get() != RotationMode.None)
         .build()
@@ -312,6 +313,8 @@ public class KillAura extends Module {
     private final TickTimer switchTimer = new TickTimer();
     private final TickTimer attackTimer = new TickTimer();
     private final AttackCycle attackCycle = new AttackCycle();
+    private long preparedGeneration;
+    private boolean prepared;
     private float targetingYaw;
     private int swappedSlot = -1;
     private boolean wasPathing = false;
@@ -342,7 +345,8 @@ public class KillAura extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        long generation = attackCycle.begin();
+        prepared = false;
+        preparedGeneration = attackCycle.begin();
         switchTimer.advance();
         attackTimer.advance();
         if (!canOperate()) { stopAttacking(); return; }
@@ -372,16 +376,14 @@ public class KillAura extends Module {
             return;
         }
 
-        Entity primary = targets.getFirst();
-
         if (autoSwitch.get()) {
             int selectedSlot = mc.player.getInventory().getSelectedSlot();
             ItemStack heldItem = mc.player.getMainHandItem();
             FindItemResult weaponResult = new FindItemResult(selectedSlot, heldItem.getCount());
 
             if (shouldShieldBreak()) {
-                if (!(heldItem.getItem() instanceof AxeItem)) {
-                    weaponResult = InvUtils.find(itemStack -> itemStack.getItem() instanceof AxeItem, 0, 8);
+                if (!(heldItem.is(net.minecraft.tags.ItemTags.AXES))) {
+                    weaponResult = InvUtils.find(itemStack -> itemStack.is(net.minecraft.tags.ItemTags.AXES), 0, 8);
                 }
             } else if (!acceptableWeapon(heldItem)) {
                 weaponResult = InvUtils.find(this::acceptableWeapon, 0, 8);
@@ -413,6 +415,20 @@ public class KillAura extends Module {
             wasPathing = true;
         }
 
+        prepared = true;
+    }
+
+    // The player tick has updated cooldowns and positions before movement submission.
+    // Run before Rotations so its movement packet carries the aim used by the callback.
+    @EventHandler(priority = 100)
+    private void onMovement(SendMovementPacketsEvent.Pre event) {
+        if (!prepared) return;
+        prepared = false;
+        long generation = preparedGeneration;
+        if (!attackCycle.valid(generation) || !canOperate()) { stopAttacking(); return; }
+        targets.removeIf(target -> !entityCheck(target));
+        if (targets.isEmpty()) { stopAttacking(); return; }
+        Entity primary = targets.getFirst();
         RotationMode rotationMode = rotation.get();
         if (delayCheck()) {
             var owner = mc.player;
@@ -444,6 +460,7 @@ public class KillAura extends Module {
     }
 
     private void stopAttacking() {
+        prepared = false;
         attackCycle.invalidate();
         targets.clear();
         attacking = false;
@@ -485,6 +502,8 @@ public class KillAura extends Module {
     }
 
     private boolean entityCheck(Entity entity) {
+        // Recheck the current crosshair at movement submission and in delayed rotation callbacks.
+        if (onlyOnLook.get() && mc.crosshairPickEntity != entity) return false;
         if (entity == mc.player || entity == mc.getCameraEntity() || entity.isRemoved() || entity.level() != mc.level) return false;
         if ((entity instanceof LivingEntity livingEntity && livingEntity.isDeadOrDying()) || !entity.isAlive())
             return false;
@@ -501,7 +520,8 @@ public class KillAura extends Module {
         double distanceSquared = dx * dx + dy * dy + dz * dz;
         if (distanceSquared > range.get() * range.get()) return false;
         double wallReach = Math.min(range.get(), wallsRange.get());
-        if (!PlayerUtils.canSeeEntity(entity) && distanceSquared > wallReach * wallReach) return false;
+        if (distanceSquared > wallReach * wallReach && (rotation.get() != RotationMode.None && aimMethod.get() == AimMethod.VisibleHitbox
+            ? visiblePoint(entity).isEmpty() : !PlayerUtils.canSeeEntity(entity))) return false;
         if (Math.abs(Mth.wrapDegrees(Rotations.getYaw(entity) - targetingYaw)) > fieldOfView.get() / 2) return false;
         if (ignoreTamed.get()) {
             if (entity instanceof OwnableEntity tameable
@@ -510,7 +530,7 @@ public class KillAura extends Module {
             ) return false;
         }
         if (ignorePassive.get()) {
-            if (entity instanceof EnderMan enderman && !enderman.isCreepy()) return false;
+            if (entity instanceof Enderman enderman && !enderman.isCreepy()) return false;
             if ((entity instanceof Piglin || entity instanceof ZombifiedPiglin || entity instanceof Wolf) && !((Mob) entity).isAggressive())
                 return false;
         }
@@ -579,13 +599,20 @@ public class KillAura extends Module {
 
     private void attack(Entity target) {
         mc.gameMode.attack(mc.player, target);
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        com.gaspoweredcake.client33.utils.player.SwingUtils.swing(InteractionHand.MAIN_HAND);
 
         attackTimer.waitTicks(TickTimer.serverDelay(hitDelay.get(), TickRate.INSTANCE.getTickRate(), tpsSync.get()));
     }
 
     private void rotateTo(Entity target, Runnable callback) {
-        if (aimMethod.get() == AimMethod.ClosestHitbox) {
+        if (aimMethod.get() == AimMethod.VisibleHitbox) {
+            var point = visiblePoint(target);
+            if (point.isPresent()) {
+                Rotations.rotate(Rotations.getYaw(point.get()), Rotations.getPitch(point.get()), callback);
+                return;
+            }
+        }
+        if (aimMethod.get() == AimMethod.ClosestHitbox || aimMethod.get() == AimMethod.VisibleHitbox) {
             Vec3 eye = mc.player.getEyePosition();
             AABB box = target.getBoundingBox();
             if (!box.contains(eye)) {
@@ -599,8 +626,20 @@ public class KillAura extends Module {
         Rotations.rotate(Rotations.getYaw(target), Rotations.getPitch(target, aimAt.get()), callback);
     }
 
+    private java.util.Optional<Vec3> visiblePoint(Entity target) {
+        Vec3 eye = mc.player.getEyePosition(); AABB box = target.getBoundingBox();
+        var result = com.gaspoweredcake.client33.utils.combat.VisibleAim.find(
+            new com.gaspoweredcake.client33.utils.combat.VisibleAim.Point(eye.x, eye.y, eye.z),
+            new com.gaspoweredcake.client33.utils.combat.VisibleAim.Point(box.minX, box.minY, box.minZ),
+            new com.gaspoweredcake.client33.utils.combat.VisibleAim.Point(box.maxX, box.maxY, box.maxZ), range.get(),
+            p -> mc.level.clip(new net.minecraft.world.level.ClipContext(eye, new Vec3(p.x(), p.y(), p.z()),
+                net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, mc.player))
+                .getType() == net.minecraft.world.phys.HitResult.Type.MISS);
+        return result.map(p -> new Vec3(p.x(), p.y(), p.z()));
+    }
+
     private boolean acceptableWeapon(ItemStack stack) {
-        if (shouldShieldBreak()) return stack.getItem() instanceof AxeItem;
+        if (shouldShieldBreak()) return stack.is(net.minecraft.tags.ItemTags.AXES);
         if (attackWhenHolding.get() == AttackItems.All) return true;
 
         if (weapons.get().contains(Items.DIAMOND_SWORD) && stack.is(ItemTags.SWORDS)) return true;
@@ -624,7 +663,7 @@ public class KillAura extends Module {
         return null;
     }
 
-    public enum AimMethod { ConfiguredPart, ClosestHitbox }
+    public enum AimMethod { ConfiguredPart, ClosestHitbox, VisibleHitbox }
 
     public enum AttackItems {
         Weapons,

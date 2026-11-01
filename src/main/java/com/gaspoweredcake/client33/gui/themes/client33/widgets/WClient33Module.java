@@ -14,8 +14,8 @@ import com.gaspoweredcake.client33.systems.modules.Module;
 import net.minecraft.util.Mth;
 
 import static com.gaspoweredcake.client33.Client33.mc;
-import static org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT;
-import static org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_RIGHT;
+import static com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT;
+import static com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_RIGHT;
 
 public class WClient33Module extends WPressable implements Client33Widget {
     private final Module module;
@@ -58,8 +58,8 @@ public class WClient33Module extends WPressable implements Client33Widget {
 
     @Override
     protected void onPressed(int button) {
-        if (button == GLFW_MOUSE_BUTTON_LEFT) module.toggle();
-        else if (button == GLFW_MOUSE_BUTTON_RIGHT) mc.gui.setScreen(theme.moduleScreen(module));
+        if (button == MOUSE_BUTTON_LEFT) module.toggle();
+        else if (button == MOUSE_BUTTON_RIGHT) mc.gui.setScreen(theme.moduleScreen(module));
     }
 
     @Override

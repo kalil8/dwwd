@@ -249,6 +249,10 @@ public abstract class GuiTheme implements ISerializable<GuiTheme> {
         return settingsFactory.create(this, settings, filter);
     }
 
+    public WWidget settings(Settings settings,String filter,String groupName) {
+        return settingsFactory.create(this,settings,filter,groupName);
+    }
+
     public WWidget settings(Settings settings) {
         return settings(settings, "");
     }

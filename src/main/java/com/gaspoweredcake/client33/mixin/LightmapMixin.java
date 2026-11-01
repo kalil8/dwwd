@@ -6,7 +6,7 @@
 package com.gaspoweredcake.client33.mixin;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.GpuTexture;
+import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.gaspoweredcake.client33.systems.modules.Modules;
 import com.gaspoweredcake.client33.systems.modules.render.Fullbright;
 import com.gaspoweredcake.client33.systems.modules.render.Xray;

@@ -14,8 +14,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import static com.gaspoweredcake.client33.Client33.mc;
 
 public class Input {
-    private static final boolean[] keys = new boolean[512];
-    private static final boolean[] buttons = new boolean[16];
+    private static final InputState state = new InputState();
 
     private static CursorStyle lastCursorStyle = CursorStyle.Default;
 
@@ -23,11 +22,15 @@ public class Input {
     }
 
     public static void setKeyState(int key, boolean pressed) {
-        if (key >= 0 && key < keys.length) keys[key] = pressed;
+        state.set(InputState.Device.Keyboard, key, pressed);
     }
 
     public static void setButtonState(int button, boolean pressed) {
-        if (button >= 0 && button < buttons.length) buttons[button] = pressed;
+        state.set(InputState.Device.Mouse, button, pressed);
+    }
+
+    public static void clearState() {
+        state.clear();
     }
 
     public static int getKey(KeyMapping bind) {
@@ -35,28 +38,31 @@ public class Input {
     }
 
     public static void setKeyState(KeyMapping bind, boolean pressed) {
-        setKeyState(getKey(bind), pressed);
+        var key = ((KeyMappingAccessor) bind).client33$getKey();
+        if (key.getType() == InputConstants.Type.MOUSE) setButtonState(key.getValue(), pressed);
+        else setKeyState(key.getValue(), pressed);
     }
 
     public static boolean isPressed(KeyMapping bind) {
-        return isKeyPressed(getKey(bind)) || isButtonPressed(getKey(bind));
+        var key = ((KeyMappingAccessor) bind).client33$getKey();
+        return key.getType() == InputConstants.Type.MOUSE ? isButtonPressed(key.getValue()) : isKeyPressed(key.getValue());
     }
 
     public static boolean isKeyPressed(int key) {
         if (!GuiKeyEvents.canUseKeys) return false;
 
         if (key == InputConstants.UNKNOWN.getValue()) return false;
-        return key < keys.length && keys[key];
+        return state.pressed(InputState.Device.Keyboard, key);
     }
 
     public static boolean isButtonPressed(int button) {
         if (button == -1) return false;
-        return button < buttons.length && buttons[button];
+        return state.pressed(InputState.Device.Mouse, button);
     }
 
     public static void setCursorStyle(CursorStyle style) {
         if (lastCursorStyle != style) {
-            style.getCursor().select(mc.getWindow());
+            style.getCursor().select();
             lastCursorStyle = style;
         }
     }
@@ -66,7 +72,7 @@ public class Input {
             case InputConstants.KEY_LSHIFT, InputConstants.KEY_RSHIFT -> InputConstants.MOD_SHIFT;
             case InputConstants.KEY_LCONTROL, InputConstants.KEY_RCONTROL -> InputConstants.MOD_CONTROL;
             case InputConstants.KEY_LALT, InputConstants.KEY_RALT -> InputConstants.MOD_ALT;
-            case InputConstants.KEY_LSUPER, InputConstants.KEY_RSUPER -> InputConstants.MOD_SUPER;
+            case InputConstants.KEY_LGUI, InputConstants.KEY_RGUI -> InputConstants.MOD_SUPER;
             default -> 0;
         };
     }

@@ -15,11 +15,24 @@ public final class ModuleLogicRegression {
         check(!cursor.hasNext() && !cursor.hasNext(), "Exhaustion remains stable");
         try { cursor.next(); throw new AssertionError("Exhausted next must throw"); }
         catch (java.util.NoSuchElementException expected) { }
+        AnimationPhaseRegression.run();
+        SurfaceMeshRegression.run();
+        WorkspacePageRegression.run();
         StorageRegression.run();
         ChestStealerRegression.run();
         GuardedActionsRegression.run();
         BlockLightRegression.run();
         StoragePillarRegression.run();
+        StorageClustersRegression.run();
+        StorageLeadSelectorRegression.run();
+        StorageHistoryRegression.run();
+        CachedStorageRegression.run();
+        StorageViewRegression.run();
+        BobbyStorageRecordsRegression.run();
+        StorageSignalsRegression.run();
+        MaterialImageRegression.run();
+        InputStateRegression.run();
+        FontRegression.run();
         SpawnerMenuRegression.run();
         PackedSectionRegression.run();
         LightFusionRegression.run();

@@ -5,6 +5,8 @@
 
 package com.gaspoweredcake.client33.utils.misc;
 
+import com.gaspoweredcake.client33.utils.misc.input.LegacyInputCodes;
+
 import com.mojang.blaze3d.platform.InputConstants;
 import com.gaspoweredcake.client33.utils.misc.input.Input;
 import net.minecraft.client.input.KeyEvent;
@@ -40,7 +42,7 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
         public boolean isKeyPressed() {
             return switch (this) {
                 case CONTROL -> Input.isKeyPressed(InputConstants.KEY_LCONTROL) || Input.isKeyPressed(InputConstants.KEY_RCONTROL);
-                case SUPER -> Input.isKeyPressed(InputConstants.KEY_LSUPER) || Input.isKeyPressed(InputConstants.KEY_RSUPER);
+                case SUPER -> Input.isKeyPressed(InputConstants.KEY_LGUI) || Input.isKeyPressed(InputConstants.KEY_RGUI);
                 case ALT -> Input.isKeyPressed(InputConstants.KEY_LALT) || Input.isKeyPressed(InputConstants.KEY_RALT);
                 case SHIFT -> Input.isKeyPressed(InputConstants.KEY_LSHIFT) || Input.isKeyPressed(InputConstants.KEY_RSHIFT);
                 case CAPS_LOCK -> Input.isKeyPressed(InputConstants.KEY_CAPSLOCK);
@@ -182,7 +184,7 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
     }
 
     private boolean isKeyMod(InputConstants.Key key) {
-        return key.getValue() >= InputConstants.KEY_LSHIFT && key.getValue() <= InputConstants.KEY_RSUPER;
+        return key.getValue() >= InputConstants.KEY_LCONTROL && key.getValue() <= InputConstants.KEY_RGUI;
     }
 
     @Override
@@ -261,14 +263,16 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
             int value = tag.getIntOr("value", InputConstants.UNKNOWN.getValue());
             int mods = tag.getIntOr("modifiers", 0);
 
-            set(isKey ? keyboard(value) : mouse(value), isKey ? Modifier.fromRawValue(mods) : Set.of());
+            int migrated = isKey ? LegacyInputCodes.keyboard(value) : LegacyInputCodes.mouse(value);
+            set(migrated == 0 ? InputConstants.UNKNOWN : isKey ? keyboard(migrated) : mouse(migrated),
+                isKey ? Modifier.fromRawValue(LegacyInputCodes.modifiers(mods)) : Set.of());
         }
 
         return this;
     }
 
     private static InputConstants.Key keyboard(int key) {
-        return InputConstants.Type.KEYSYM.getOrCreate(key);
+        return InputConstants.Type.KEYBOARD.getOrCreate(key);
     }
 
     private static InputConstants.Key mouse(int button) {

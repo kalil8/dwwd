@@ -299,7 +299,7 @@ public class Freecam extends Module {
         for (InteractionHand hand : InteractionHand.values()) {
             InteractionResult result = mc.gameMode.useItemOn(mc.player, hand, hit);
             if (result instanceof InteractionResult.Success) {
-                mc.player.swing(hand);
+                com.gaspoweredcake.client33.utils.player.SwingUtils.swing(hand);
                 event.cancel();
                 return;
             }

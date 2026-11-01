@@ -221,7 +221,7 @@ public class VeinMiner extends Module {
 
         public void mine() {
             if (!mining) {
-                mc.player.swing(InteractionHand.MAIN_HAND);
+                com.gaspoweredcake.client33.utils.player.SwingUtils.swing(InteractionHand.MAIN_HAND);
                 mining = true;
             }
             if (rotate.get())

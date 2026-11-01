@@ -179,7 +179,8 @@ public class Client33 implements ClientModInitializer {
 
     @EventHandler(priority = EventPriority.LOWEST)
     private void onOpenScreen(OpenScreenEvent event) {
-        if (event.screen instanceof WidgetScreen) {
+        boolean workspace = event.screen instanceof WidgetScreen || com.gaspoweredcake.client33.gui.screens.StrataWorkspace.isScreen(event.screen);
+        if (workspace) {
             if (!wasWidgetScreen) wasHudHiddenRoot = mc.gameRenderer.gameRenderState().guiRenderState.isHudHidden;
             if (GuiThemes.get().hideHUD() || wasHudHiddenRoot) {
                 // Always show the MC HUD in the HUD editor screen since people like
@@ -193,7 +194,7 @@ public class Client33 implements ClientModInitializer {
             wasHudHiddenRoot = mc.gameRenderer.gameRenderState().guiRenderState.isHudHidden;
         }
 
-        wasWidgetScreen = event.screen instanceof WidgetScreen;
+        wasWidgetScreen = workspace;
     }
 
     public static Identifier identifier(String path) {

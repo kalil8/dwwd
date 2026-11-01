@@ -10,7 +10,7 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import com.gaspoweredcake.client33.Client33;
+import com.gaspoweredcake.client33.utils.intel.SectionSnapshot;
 import com.gaspoweredcake.client33.events.render.Render3DEvent;
 import com.gaspoweredcake.client33.events.world.TickEvent;
 import com.gaspoweredcake.client33.renderer.Renderer3D;
@@ -19,19 +19,16 @@ import com.gaspoweredcake.client33.settings.*;
 import com.gaspoweredcake.client33.systems.modules.Categories;
 import com.gaspoweredcake.client33.systems.modules.Module;
 import com.gaspoweredcake.client33.utils.Utils;
-import com.gaspoweredcake.client33.utils.network.Client33Executor;
 import com.gaspoweredcake.client33.utils.render.color.SettingColor;
 import com.gaspoweredcake.client33.utils.world.Dir;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.Level;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 public class TunnelESP extends Module {
@@ -119,7 +116,7 @@ public class TunnelESP extends Module {
             for (int z = startZ; z <= endZ; z++) {
                 int height = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE).getFirstAvailable(x - startX, z - startZ);
 
-                for (short y = (short) mc.level.getMinY(); y < height; y++) {
+                for (int y = ctx.world.getMinY(); y < height; y++) {
                     if (isTunnel(ctx, x, y, z)) set.add(pack(x - startX, y, z - startZ));
                 }
             }
@@ -183,7 +180,7 @@ public class TunnelESP extends Module {
         if (state.isAir()) return false;
         if (!state.getFluidState().isEmpty()) return false;
 
-        return !state.getCollisionShape(mc.level, BP.set(x, y, z)).isEmpty();
+        return !state.getCollisionShape(ctx.world, BP.set(x, y, z)).isEmpty();
     }
 
     private boolean canWalkThrough(Context ctx, int x, int y, int z) {
@@ -192,7 +189,7 @@ public class TunnelESP extends Module {
         if (state.isAir()) return true;
         if (!state.getFluidState().isEmpty()) return false;
 
-        return state.getCollisionShape(mc.level, BP.set(x, y, z)).isEmpty();
+        return state.getCollisionShape(ctx.world, BP.set(x, y, z)).isEmpty();
     }
 
     private boolean canWalkIn(Context ctx, int x, int y, int z) {
@@ -211,12 +208,12 @@ public class TunnelESP extends Module {
             for (ChunkAccess chunk : Utils.chunks(true)) {
                 long key = ChunkPos.pack(chunk.getPos().x(), chunk.getPos().z());
 
-                if (chunks.containsKey(key)) chunks.get(key).marked = true;
-                else if (added < 48) {
-                    TChunk tChunk = new TChunk(chunk.getPos().x(), chunk.getPos().z());
+                if (chunks.containsKey(key) && chunks.get(key).source == chunk) chunks.get(key).marked = true;
+                else if (added < 1) {
+                    TChunk tChunk = new TChunk(chunk);
                     chunks.put(tChunk.getKey(), tChunk);
 
-                    Client33Executor.execute(() -> searchChunk(chunk, tChunk));
+                    searchChunk(chunk, tChunk);
                     added++;
                 }
             }
@@ -254,13 +251,15 @@ public class TunnelESP extends Module {
 
     private class TChunk {
         private final int x, z;
+        private final ChunkAccess source;
         public IntSet positions;
 
         public boolean marked;
 
-        public TChunk(int x, int z) {
-            this.x = x;
-            this.z = z;
+        public TChunk(ChunkAccess source) {
+            this.source = source;
+            this.x = source.getPos().x();
+            this.z = source.getPos().z();
             this.marked = true;
         }
 
@@ -297,32 +296,17 @@ public class TunnelESP extends Module {
     }
 
     private static class Context {
-        private final Level world;
-
-        private ChunkAccess lastChunk;
+        private final ClientLevel world;
 
         public Context() {
-            this.world = Client33.mc.level;
+            this.world = com.gaspoweredcake.client33.Client33.mc.level;
         }
 
         public BlockState get(int x, int y, int z) {
             if (world.isOutsideBuildHeight(y)) return Blocks.VOID_AIR.defaultBlockState();
 
-            int cx = x >> 4;
-            int cz = z >> 4;
-
-            ChunkAccess chunk;
-
-            if (lastChunk != null && lastChunk.getPos().x() == cx && lastChunk.getPos().z() == cz) chunk = lastChunk;
-            else chunk = world.getChunk(cx, cz, ChunkStatus.FULL, false);
-
-            if (chunk == null) return Blocks.VOID_AIR.defaultBlockState();
-
-            LevelChunkSection section = chunk.getSections()[chunk.getSectionIndex(y)];
-            if (section == null) return Blocks.VOID_AIR.defaultBlockState();
-
-            lastChunk = chunk;
-            return section.getBlockState(x & 15, y & 15, z & 15);
+            if (!world.hasChunk(x >> 4, z >> 4)) return Blocks.VOID_AIR.defaultBlockState();
+            return SectionSnapshot.live(world, BP.set(x, y, z));
         }
     }
 

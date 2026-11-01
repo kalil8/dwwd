@@ -8,6 +8,7 @@ package com.gaspoweredcake.client33.gui.screens;
 import com.mojang.blaze3d.platform.MacosUtil;
 import com.gaspoweredcake.client33.events.client33.ActiveModulesChangedEvent;
 import com.gaspoweredcake.client33.gui.GuiTheme;
+import com.gaspoweredcake.client33.gui.utils.WorkspacePage;
 import com.gaspoweredcake.client33.gui.tabs.TabScreen;
 import com.gaspoweredcake.client33.gui.tabs.Tabs;
 import com.gaspoweredcake.client33.gui.widgets.WLabel;
@@ -46,7 +47,10 @@ public class ModulesScreen extends TabScreen {
     private WVerticalList navigation;
     private WLabel summary;
     private Category category;
-    private Filter filter = Filter.Home;
+    private Filter filter = Filter.All;
+    private int page;
+    private WLabel pageLabel;
+    private WButton previousPage, nextPage;
     private String query = "";
 
     public ModulesScreen(GuiTheme theme) {
@@ -55,14 +59,14 @@ public class ModulesScreen extends TabScreen {
 
     @Override
     public void initWidgets() {
-        WWindow window = add(theme.window("33  /  WORKSPACE")).centerX().top().marginTop(46).widget();
+        WWindow window = add(theme.window("33  /  WORKSPACE")).centerX().top().marginTop(36).widget();
         window.padding = 10;
         window.view.spacing = 8;
 
         WHorizontalList body = window.add(theme.horizontalList()).expandX().widget();
         body.spacing = 12;
         WView sidebar = body.add(theme.view()).top().widget();
-        sidebar.maxHeight = Math.max(theme.scale(90), getWindowHeight() - theme.scale(210));
+        sidebar.maxHeight = Math.max(theme.scale(90), getWindowHeight() - theme.scale(140));
         navigation = sidebar.add(theme.verticalList()).minWidth(125).expandX().widget();
         navigation.spacing = 4;
         refreshNavigation();
@@ -71,14 +75,21 @@ public class ModulesScreen extends TabScreen {
         content.spacing = 8;
         WHorizontalList toolbar = content.add(theme.horizontalList()).expandX().widget();
         search = toolbar.add(theme.textBox(query, "Search modules and settings  /  Ctrl+F")).minWidth(200).expandX().widget();
-        search.action = () -> { query = search.get(); refreshResults(); };
+        search.action = () -> { query = search.get(); page=0; refreshResults(); };
         toolbar.add(theme.button("Clear")).widget().action = () -> {
-            search.set(""); query = ""; search.setFocused(true); refreshResults();
+            search.set(""); query = ""; page=0; search.setFocused(true); refreshResults();
         };
+        toolbar.add(theme.button("Strata workspace")).widget().action = StrataWorkspace::open;
         summary = content.add(theme.label("")).padTop(4).widget();
-        results = content.add(theme.view()).minWidth(Math.max(240, Math.min(760, getWindowWidth() / theme.scale(1) - 330))).expandX().widget();
-        results.maxHeight = Math.max(theme.scale(70), sidebar.maxHeight - theme.scale(58));
+        results = content.add(theme.view()).minWidth(Math.max(240, Math.min(1100, getWindowWidth() / theme.scale(1) - 240))).expandX().widget();
+        results.maxHeight = Math.max(theme.scale(70), sidebar.maxHeight - theme.scale(108));
         results.spacing = 10;
+        WHorizontalList pager=content.add(theme.horizontalList()).expandX().widget();
+        previousPage=pager.add(theme.button("Previous")).widget();
+        pageLabel=pager.add(theme.label("")).expandCellX().widget();
+        nextPage=pager.add(theme.button("Next")).widget();
+        previousPage.action=()->{page--;refreshResults();};
+        nextPage.action=()->{page++;refreshResults();};
         refreshResults();
 
         if (theme.modulesHelpText()) {
@@ -119,16 +130,13 @@ public class ModulesScreen extends TabScreen {
         for (Category value : Modules.loopCategories()) {
             navigation.add(theme.button((category == value ? ">  " : "    ") + value.name)).expandX().widget().action = () -> select(value, Filter.All);
         }
-        navigation.add(theme.label("QUICK ACCESS").color(theme.textSecondaryColor())).padTop(10);
-        for (String name : new String[]{"esp", "chams", "combat-visuals", "kill-aura", "crystal-aura", "faction-intel", "movement-heatmap", "structure-esp"}) {
-            Module module = Modules.get().get(name);
-            if (module != null) navigation.add(theme.button(module.title + "  >")).expandX().widget().action = () -> mc.gui.setScreen(theme.moduleScreen(module));
-        }
+
     }
 
     private void select(Category category, Filter filter) {
         this.category = category;
         this.filter = filter;
+        page=0;
         refreshNavigation();
         refreshResults();
     }
@@ -136,6 +144,8 @@ public class ModulesScreen extends TabScreen {
     private void refreshResults() {
         if (results == null) return;
         results.clear();
+        pageLabel.set("");
+        previousPage.action=()->{}; nextPage.action=()->{};
         String text = query.strip().toLowerCase(Locale.ROOT);
         if (filter == Filter.Home && category == null && text.isEmpty()) {
             summary.set("OVERVIEW  /  Your workspace");
@@ -167,13 +177,18 @@ public class ModulesScreen extends TabScreen {
         WTable grid = results.add(theme.table()).expandX().widget();
         grid.horizontalSpacing = 10;
         grid.verticalSpacing = 10;
-        int columns = getWindowWidth() / theme.scale(1) >= 1000 ? 2 : 1;
+        WorkspacePage layout=WorkspacePage.layout(Math.max(240,getWindowWidth()/theme.scale(1)-240),results.maxHeight/theme.scale(1),modules.size(),page);
+        page=layout.page();
+        pageLabel.set("Page "+(page+1)+" / "+layout.pages());
+        previousPage.action=()->{page=Math.max(0,page-1);refreshResults();};
+        nextPage.action=()->{page=Math.min(layout.pages()-1,page+1);refreshResults();};
+        int columns=layout.columns();
         int index = 0;
-        for (Module module : modules) {
+        for (Module module : modules.subList(layout.from(),layout.to())) {
             WPanel panel = grid.add(new WPanel()).expandX().top().widget();
-            panel.add(theme.label(module.category.name.toUpperCase(Locale.ROOT)).color(theme.textSecondaryColor())).padHorizontal(12).padTop(10);
+            panel.tooltip=module.description;
             panel.add(theme.module(module)).expandX().padHorizontal(7).padTop(3);
-            panel.add(theme.label(module.description, 290)).padHorizontal(12).padBottom(5);
+
             WHorizontalList row = panel.add(theme.horizontalList()).expandX().pad(8).widget();
             WFavorite favorite = row.add(theme.favorite(module.favorite)).widget();
             favorite.tooltip = "Add to favorites";
@@ -240,7 +255,8 @@ public class ModulesScreen extends TabScreen {
         };
         boolean signature = esp.mode.get() == ESP.Mode.Hologram || esp.mode.get() == ESP.Mode.Constellation;
         boolean screen = esp.mode.get() == ESP.Mode._2D || esp.mode.get() == ESP.Mode.Telemetry;
-        if (signature || esp.mode.get() == ESP.Mode.Telemetry) toggle(entity, "Animated scans", esp.animate);
+        if (signature || esp.isSurfaceMode() || esp.mode.get() == ESP.Mode.Telemetry) toggle(entity, "Animated scans", esp.animate);
+        if (esp.isSurfaceMode()) toggle(entity,"Through walls",esp.throughWalls);
         if (signature) {
             toggle(entity, "Ground markers", esp.groundMarker);
             toggle(entity, "Through walls", esp.throughWalls);

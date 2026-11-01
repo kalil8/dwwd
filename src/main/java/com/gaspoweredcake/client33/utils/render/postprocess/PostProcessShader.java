@@ -1,17 +1,17 @@
 package com.gaspoweredcake.client33.utils.render.postprocess;
 
-import com.mojang.blaze3d.GpuFormat;
+import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.buffers.Std140SizeCalculator;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.FilterMode;
 import com.gaspoweredcake.client33.Client33;
 import com.gaspoweredcake.client33.renderer.MeshRenderer;
 import net.minecraft.client.gui.render.GuiRenderer;
-import net.minecraft.client.renderer.DynamicUniformStorage;
+import com.gaspoweredcake.client33.renderer.DynamicUniformStorage;
 import org.jspecify.annotations.NonNull;
 
 import java.nio.ByteBuffer;
@@ -24,8 +24,7 @@ public abstract class PostProcessShader {
 
     protected PostProcessShader(RenderPipeline pipeline) {
         this.pipeline = pipeline;
-        this.framebuffer = new TextureTarget(Client33.NAME + " PostProcessShader " + this.getClass().getSimpleName(), mc.getWindow().getWidth(), mc.getWindow().getHeight(), true,
-            GpuFormat.RGBA8_UNORM);
+        this.framebuffer = new TextureTarget(Client33.NAME + " PostProcessShader " + this.getClass().getSimpleName(), mc.getWindow().getWidth(), mc.getWindow().getHeight(), GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT);
     }
 
     protected abstract boolean shouldDraw();
@@ -57,6 +56,7 @@ public abstract class PostProcessShader {
 
     public void render() {
         if (!shouldDraw()) return;
+
 
         var renderer = MeshRenderer.begin()
             .attachments(mc.gameRenderer.mainRenderTarget())

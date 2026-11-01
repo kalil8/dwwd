@@ -8,13 +8,24 @@ Press **Right Shift** to open 33. The startup credit is simply **33**.
 
 <!-- coderabbit-ai-generated-section:v1:0b8b4973d3eb78cdf3f50feb7f56ed671b229c01f2b1f65921d93b10f5addc21 -->
 
-- The workspace opens on an overview with module counts, quick controls, and links to the library and Visual Studio. Use the scrollable sidebar for categories, All, Favorites, Enabled, and quick access.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:28b3a0d0e349a81fc30979e795ae292f1383f88107c477a77d3d26c0ad2af9dd -->
+
+- The Strata library opens with paginated modules. Use the sidebar for categories, All, Favorites, Enabled, the classic workspace, and client settings.
 
 <!-- /coderabbit-ai-generated:v1 -->
-- Search names, descriptions, and setting titles. Exact name matches appear first.
-- Click a module to switch it on or off. Click **Configure** (or right-click the module) to configure it.
-- Star a module to keep it in Favorites. Hidden modules stay out of library search results.
-- Press **Ctrl+F** (**Command+F** on macOS) to focus the browser search.
+
+<!-- /coderabbit-ai-generated:v1 -->
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:33a5fbdf30a08263daf498d17c3aed8c20618466b026da27922a620a630870ba -->
+
+- Search names, descriptions, and setting titles. Results are alphabetical.
+- Use the module button to switch it on or off and **Configure** to open its settings.
+- Star a module in its settings to keep it in Favorites. Hidden modules stay out of library search results.
+
+<!-- /coderabbit-ai-generated:v1 -->
 - Inside a module, use **Find a setting** to filter controls. The enable switch and Back button are at the top; keybind and feedback controls are in a collapsible section.
 
 <!-- coderabbit-ai-generated:v1 -->
@@ -165,9 +176,25 @@ The effect uses the existing through-walls entity mask. Its pattern and halo are
 
 Targets come from a nearby spatial query. A bounded priority queue retains the best candidates with scores calculated once per candidate and stable entity-ID tie breaking. Keep Target retains a valid primary target. Field of View limits the horizontal targeting cone. Attack and wall ranges both measure from the player's eyes to the closest point on the target hitbox.
 
-Aim Method defaults to Configured Part, using the existing Aim At choice. Closest Hitbox optionally aims at the nearest interior point of the target bounds, falling back to the configured part when your eyes are inside those bounds. It does not predict future movement or guarantee that the aim point is unobstructed.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:1a675d516722e375269e4fd395ef060c2e3ab8b9ea0670cee18ee37768fb51b5 -->
+
+Aim Method defaults to Configured Part, using the existing Aim At choice. Closest Hitbox optionally aims at the nearest interior point of the target bounds, falling back to the configured part when your eyes are inside those bounds. It does not predict future movement or guarantee that the aim point is unobstructed. Visible Hitbox samples interior points in order of proximity and uses a collider raycast to choose an unobstructed point within the configured range. If no sample is visible, attacks still respect the configured wall range and fall back to the nearest point where wall attacks are allowed. The server may use different reach or visibility rules. Only On Look rechecks the selected crosshair entity when an attack is sent.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:00108da1fe3dbc37301570bdd1ec657b71a3819dfc73848ef2c2726fc1933c68 -->
 
 Vanilla attack cooldown is used by default. Custom delays use a tick clock that advances while paused; TPS Sync scales custom delays. Weapon switch delay is independent. Queued attacks recheck pause conditions, player/world identity, weapon components and slot, cooldown and target validity immediately before execution. Normal cooldowns are reserved once per tick; zero-delay custom batches retain multiple-target support. Changing ticks or stopping the module invalidates queued work. Swap Back restores a slot only while KillAura still owns the selected slot, preserving a manual slot change. Friend, entity type, age, named/tamed entity, and shield filters still apply.
+
+Minecraft 26.3 uses two phases: the beginning of the client tick selects targets and handles weapon selection; immediately before movement submission, KillAura revalidates targets and checks the updated player cooldown. Its rotation is queued before Rotations prepares movement, and the attack callback executes after the rotation packet. This avoids making readiness decisions from the previous player tick while retaining the once-per-tick attack reservation. The vehicle hooks now target 26.3 `LocalPlayer.sendChanges`. Deferred Jump/MiniJump critical attacks expire after 30 client ticks and are discarded on player/world, target identity, mode, selected-slot or weapon changes, death, disconnect or module shutdown. This does not establish that packet critical modes work on any particular server.
+
+SDL keyboard scancodes and mouse buttons now have separate state. Releases update while widget shortcut dispatch is suppressed; losing focus clears held input. Existing raw GLFW bindings are migrated by key meaning. Minecraft 26.3 removed the old hand-specific swing packet; animation uses the held item’s attack animation and server notification uses the vanilla punch packet. The server punch has no offhand field. These are compatibility and scheduling changes, not a measured reduction in network latency or a guarantee of combat outcomes.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 
@@ -192,7 +219,31 @@ Use Java 25 and `./gradlew build`. The build's `check` task runs `moduleLogicReg
 
 ## Visual Studio and combat effects
 
-The menu uses the existing custom Minecraft GPU pipelines (tested with OpenGL), not ImGui or DX11. It stays integrated with Minecraft input, scaling and resource lifecycle without another native dependency. The animated menu figures are schematic previews, not live player models; use a world to see actual effects. Saved custom theme colors remain in place; reset GUI color settings to use the new crimson defaults.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:79743cf862df91676b6ad55e8cb165a58f18516bdeaf889872f9115fed9832c5 -->
+
+Right Shift now opens the **Strata module library** on Minecraft 26.3. Strata manages focus, input and responsive layout; search covers module names, descriptions and settings. The library uses readable 11-unit text and compact 64-unit cards, with up to four columns and eight rows. At a 960 × 540 GUI size, 24 modules fit on one page. <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:6085e71f667a2597ce7f03d93c77a6e56579e0340c52cfa484d43b45bad198a7 -->
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:4dd43a475bf8be6930680a01e6d5c8425de92f84379064a952ac396aa60774ca -->
+
+The **Classic UI** button opens the existing workspace and its Visual Studio; **Client settings** opens the existing settings tabs.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+**Skia / Skija 0.143.18** rasterizes antialiased directional curves and rounded panel borders into Strata pixel buffers. Panel rasters are bounded to 1024 × 512 and cached by dimensions, with eight cached sizes per screen; unchanged frames reuse the uploaded texture. Strata owns texture upload and disposal. This is actual native Skia rasterization followed by Minecraft texture compositing, rather than a second OpenGL context or a replacement game renderer. Native panel raster tests check alpha, dimensions and deterministic output.
+
+When the Strata library is open in a world, the existing blur chain is composited through a rounded signed-distance mask matching the panel margin. The outer scene stays sharp; an antialiased rim and translucent charcoal surface provide separation. This workspace effect is available without enabling the general Blur module. The general module retains its settings for other screens. The glass shader is checked at three display scales; native GUI interaction and visual verification remain a separate gate.
+
+Minecraft 26.3 routes custom shaders through SPIR-V. Explicit stage locations and matching 2D/3D position declarations preserve the old implicit vertex defaults; RenderPearl still emits GLSL 330 for OpenGL. Shader resources retain their existing names and resource-pack lookup. The animated menu figures remain schematic previews; enter a world to see entity effects. Classic theme colors remain configurable in the existing GUI tab.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 - **Hologram ESP**: segmented ground orbit, vertical rails and a rising scan band.
 - **Constellation ESP**: twin animated helices with bright nodes around each entity.
@@ -222,9 +273,82 @@ The menu uses the existing custom Minecraft GPU pipelines (tested with OpenGL), 
 
 Open **Studio → World Intelligence / PvP Control**, or search these module names.
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:bb4825e7f4e7c9f354946015776e72c9dd2b738ad110c75d5133f5ccd05bc18a -->
+
 ### Container ESP (`storage-esp`)
 
-Discovery now walks the loaded 26.2 chunk block-entity positions incrementally instead of enumerating every chunk on every rendered frame. It validates entries against the current client world, clears on world changes, deduplicates double chests and includes container entities (chest boats and chest/hopper minecarts). Discovery, cache and render budgets bound work. Block Shader mode is preserved; vehicle storage uses a box overlay. No container contents or unloaded chunks are inferred.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:5eac44c85a259526a16d4bbef8c8de31476b5ac540499774c97d635074f9d8a7 -->
+
+Storage Leads groups observed containers in connected 16-block spatial cells, deduplicates double chests and displays cardinal bearing, actual storage coordinates and count in a compact panel, including offscreen groups. A lead is not proof of a player base. All current entries remain indexed; the panel row count does not reduce world coverage. Distant Locators add camera-facing diamonds of approximately five pixels to containers whose boxes become hard to distinguish. The panel shares its available rows among current, remembered, cached and heard sources and can show multiple cached groups. **Lead Order** ranks groups within each source by largest or nearest; cached rows include distance and remain marked age unknown. The row limit controls only display, and the panel fits the available screen height.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+Remember Locations retains detached coordinates after chunk unload for the current world/session, labeled **LAST SEEN** with the anchor's observation age. Default lifetime is two hours, adjustable up to 24 hours, without distance-based eviction. A fresh chunk scan replaces or invalidates its previous locations. World changes, leaving or deactivation clear history; records are not persisted across sessions or combined across servers/dimensions. Current boxes only use loaded, validated objects. The HUD refreshes grouped locations once per second.
+
+Storage Sounds adds **HEARD** leads for received vanilla chest, ender-chest, barrel and shulker opening/closing sounds. These expire after two minutes and never become confirmed containers or inflate container counts. Sounds can come from you or be simulated by server plugins; actor, access permission, contents and presence of a base remain unknown. The sound hook runs after packet application on the client thread. No additional server requests are sent.
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e73511f2ba4c007eae09f839b4149368b000d24cf9a5e1ab5b6a28e76027150e -->
+
+The atlas keeps current, session history, cached and heard observations distinct. Historical coordinates and 2D bearings remain useful beyond terrain projection range.
+
+### 300-chunk terrain and Storage ESP
+
+Bobby **5.2.16+mc26.3**, published October 6, 2026, is bundled to store and reload previously received chunks. <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:a7a8b2388adc25737912136874c2cc43fa992a0c96bbacada052a93e10e744d6 -->
+
+Video Settings permits **300 chunks** (4,800 blocks); larger configured maxima are preserved. The effective Bobby maximum is raised to at least 300 so its Sodium settings overlay offers the same range. Sodium 0.9.3-beta.1 for 26.3 includes the October option-range update; it is an optional separately installed mod, not bundled.
+
+<!-- /coderabbit-ai-generated:v1 --> Choose a distance in Video Settings rather than changing simulation distance. Existing saved distance preferences are retained. Entity ESP’s distance setting also permits 4,800 blocks; entities still require server tracking data. [Bobby’s October 26.3 update](https://github.com/Johni0702/bobby/commit/6c548c937aeb18943f84ba3cef724ee6c35142fa), [Sodium’s October option-range update](https://github.com/CaffeineMC/sodium/commit/fd70f9400ecb6bd41a7ed233a6632a885fc46b28).
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:6c00da230fa31d606d7722e631528b0f7b6b63bd58a251ab6ab5ef4bdf4fcf4a -->
+
+Storage ESP → **Storage Leads → Cached Storage** reads Bobby’s serialized block-entity records, including disk-loaded chunks when Bobby’s default **No Block Entities** option is enabled. The disk-load adapter retains only coordinates and block-entity types; inventory NBT stays with Bobby.
+
+<!-- /coderabbit-ai-generated:v1 --> This avoids constructing chest entities just to find cached coordinates. New cache loads are indexed immediately; an incremental sweep covers existing cached chunks. Only selected storage types are displayed. Coordinates are stored without retaining chunk objects, and a fresh live chunk supersedes its old cached records. The cache index has no distance/count quota and clears on world change or module shutdown. Bobby owns persistent chunk files and their world separation; saved data may be outdated or supplied by a configured fallback world.
+
+Live storage uses solid diamonds; session history uses broken crosses; saved cache uses violet brackets and a **CACHED / age unknown** compass row. Cached coordinates do not assert live containers, current contents or another player’s presence. Locator geometry is uniformly scaled toward the camera while preserving its projected direction and pixel size, so vanilla’s terrain far plane cannot discard a 300-chunk marker. Full boxes, model shaders and depth comparisons still use game projection. No additional chunks or entity packets are requested by Storage ESP, and withheld server data remains unavailable.
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:1cadbf0fea52b795200fd8a296cee5a4da755dec1da679e2ffb2b7a1f5542d12 -->
+
+The pure cache regression indexes all **361,201 positions** in a square extending 300 chunks along both axes, checks filtering, duplicate records and live invalidation, and independently checks locator projection at 4,800 blocks and farther. This is synthetic coverage, not an in-game FPS benchmark or live-server verification. Native startup and multiplayer checks remain separate gates.
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:34b889bb224040ab04ea485867d867e86d7105df595b186d777b6b3ab2c6cfb0 -->
+
+Cached-marker rendering groups the full filtered snapshot into **128-block spatial pages**. Each frame rejects pages and unit boxes outside four padded camera side planes before creating locator geometry or checking live chunk overrides. There are no near/far planes in this check: the terrain clipping distance never truncates the cache. Offscreen records still contribute to the compass and remain indexed; turning the camera queries the same complete snapshot. World-border positions are subtracted from the camera in double precision. Visible cached markers in the same chunk share one liveness lookup per frame; the lookup resets next frame so live chunks continue to override stale cache promptly. Cached group calculation is skipped when Storage Leads is disabled, while cached markers and indexing continue.
+
+<!-- /coderabbit-ai-generated:v1 --> The synthetic forward-camera regression retains all 361,201 records while visiting 95,716 candidates, and compares the result against testing every record. This measures candidate reduction, not FPS or server discovery.
+
+This follows established techniques used in [JOML frustum tests](https://github.com/JOML-CI/JOML/blob/master/src/main/java/org/joml/FrustumIntersection.java) and [Conveyal R5 spatial hash grids](https://github.com/conveyal/r5/blob/dev/src/main/java/com/conveyal/r5/streets/IntHashGrid.java). The implementation uses the existing JOML dependency; no GIS library or copied project source is added. Bobby remains the source of saved chunk metadata.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+Bobby is used as an LGPL-3.0 dependency; its source and license are available in the [Bobby repository](https://github.com/Johni0702/bobby). No claim is made that caching or homogeneous projection is new to Minecraft.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:99ad60ce9f27da6e78284ec1ad8786e34b03292bf7ea64da621565f94654ba80 -->
+
+Discovery walks every received chunk slot, including chunks outside the terrain renderer’s radius. Newly received chunk data is indexed on the client thread immediately; incremental sweeps catch later block changes. The sweep defaults to 32 chunks per tick and controls update latency only. Entries are validated against the current world, removed on unload/replacement and cleared on world changes. Double chests are deduplicated; chest boats and chest/hopper minecarts are included. Storage has no distance cutoff, overlay count cap or fixed container cache eviction limit. Block Shader mode is preserved; vehicle storage uses a box overlay. Only received, currently loaded storage is drawn; contents and unloaded chunks are not inferred.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ### Faction Intel (`faction-intel`)
 
@@ -297,11 +421,23 @@ AutoReplenish retains an exhausted slot's item template until you edit your inve
 
 <!-- coderabbit-ai-generated-section:v1:1d90b3260f421ae77b690d1c9bfe3ca4b9e3448a9bbe104d82c8b82559a72718 -->
 
-Choose **Storage ESP → Box Style → Hologram** for corner rails, a scanning band and broken locator rings. Corners, Full and Shader remain available. Signature Visuals controls animation, accent and label scale. Closest loaded blocks receive the render budget first. Matching double-chest halves share a box and label. Enable **Vertical Pillars** under Signature Visuals for translucent columns from loaded containers to build height. Their color follows the container, width and maximum opacity are configurable, and opacity fades linearly from full at 32 blocks to zero at 128. Pillar discovery uses this range independently of the box max-distance. Pillars have a separate render budget using the same limit; block containers are prioritized before vehicles. Unloaded chunks cannot be shown.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:7f7e84fb47ee33cac7bf8396d03dafa35b4c56467d9394c0b384c0ae9a8bb868 -->
+
+Choose **Storage ESP → Box Style → Hologram** for corner rails, a scanning band and broken locator rings. Corners, Full and Shader remain available. Signature Visuals controls animation, accent and label scale. Every eligible loaded container is submitted each frame; there is no nearest-only rendering quota. Matching double-chest halves share a box and label. Enable **Vertical Pillars** for translucent columns to build height, retaining their configured opacity at every finite distance. This intentionally replaces the former 32–128 block pillar fade, 64-block default range, 512-overlay default quota and 8,192-entry cache eviction, as requested. Old saved distance/quota settings no longer apply. Incremental indexing, reusable mesh batches and removal of per-tick distance sorting reduce work without discarding distant storage. GPU projection clipping, screen resolution and server-sent chunk coverage still constrain visibility; no higher FPS or server tracking distance is promised.
 
 <!-- /coderabbit-ai-generated:v1 -->
 
-Container Intelligence adds nonoverlapping labels and a reticle inspector. Labels show type/custom name, distance, capacity, observed occupied slots, item totals and observation age. Optional coordinates and separate label distance/count limits keep dense storage areas readable. Point near a container to inspect its registry type, XYZ/chunk/dimension, current block-state properties, and chest block-above obstruction. The block-above check does not detect cats or plugin access rules.
+<!-- /coderabbit-ai-generated:v1 -->
+
+Container Intelligence adds nonoverlapping labels and a reticle inspector. Labels show type/custom name, distance, capacity, observed occupied slots, item totals and observation age. <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:0f8127282f6a31f56381b9ddd20480d88c0530ba64a5f8ce36bd66c538d737fa -->
+
+Optional coordinates, nonoverlap placement and a label count limit keep dense storage areas readable; labels and reticle selection have no distance cutoff. The label limit does not remove storage boxes or pillars.
+
+<!-- /coderabbit-ai-generated:v1 --> Point near a container to inspect its registry type, XYZ/chunk/dimension, current block-state properties, and chest block-above obstruction. The block-above check does not detect cats or plugin access rules.
 
 **Contents unknown** means no usable server inventory observation exists. Opening a compatible container records only its server-sent storage slots, excluding player inventory and cursor. Later slot packets update the summary. Predicted inventory clicks are also sampled from the initialized menu because accepted clicks may not produce a slot echo; those summaries explicitly read **Client menu view**, rather than **Server snapshot**. The inspector lists the most numerous item types, custom names, enchanted-stack count and lowest equipment durability. Double chests, normal storage menus and container vehicles are supported. Server plugins can use different menus; compatible menu association is based on your recent interaction and is not an authoritative remote inventory API.
 

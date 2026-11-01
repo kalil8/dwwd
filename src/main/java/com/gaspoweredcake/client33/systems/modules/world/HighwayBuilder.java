@@ -762,7 +762,7 @@ public class HighwayBuilder extends Module {
                 normalMining.stopDestroying();
             }
 
-            mc.player.swing(InteractionHand.MAIN_HAND);
+            com.gaspoweredcake.client33.utils.player.SwingUtils.swing(InteractionHand.MAIN_HAND);
         }
 
         if (packetMining != null) {

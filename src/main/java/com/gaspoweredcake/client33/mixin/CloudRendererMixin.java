@@ -17,8 +17,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(CloudRenderer.class)
 public abstract class CloudRendererMixin {
-    @Inject(method = "render", at = @At("HEAD"), cancellable = true)
-    private void onRenderClouds(int color, CloudStatus cloudStatus, float bottomY, int range, Vec3 cameraPosition, long gameTime, float partialTicks, CallbackInfo ci) {
+    @Inject(method = "render(Lnet/minecraft/client/CloudStatus;Lcom/mojang/renderpearl/api/commands/RenderPass;)V", at = @At("HEAD"), cancellable = true)
+    private void onRenderClouds(CallbackInfo ci) {
         Ambience ambience = Modules.get().get(Ambience.class);
         if (ambience.isActive() && ambience.endSky.get()) ci.cancel();
     }

@@ -63,10 +63,10 @@ public class ActivityESP extends Module {
         Object p = event.packet;
         if (p instanceof ClientboundLevelChunkWithLightPacket chunk) {
             if (!light.get()) return;
-            p = new LightPacket(chunk.getX(), chunk.getZ(), chunk.getLightData());
+            p = new LightPacket(chunk.x(), chunk.z(), chunk.lightData());
         } else if (p instanceof ClientboundLightUpdatePacket update) {
             if (!light.get()) return;
-            p = new LightPacket(update.getX(), update.getZ(), update.getLightData());
+            p = new LightPacket(update.x(), update.z(), update.lightData());
         } else if (p instanceof ClientboundSoundPacket sound) {
             if (!sounds.get() || soundLabel(sound.getSound().value().location().getPath()) == null) return;
         } else if (p instanceof ClientboundSoundEntityPacket sound) {
@@ -94,8 +94,8 @@ public class ActivityESP extends Module {
                 Entity entity = mc.level.getEntity(sound.getId());
                 if (label != null && entity != null) add(entity.getX(), entity.getY(), entity.getZ(), label + " / " + sound.getSource(), now);
             } else if (p instanceof ClientboundLevelParticlesPacket packet && particles.get()) {
-                var type = packet.getParticle().getType();
-                add(packet.getX(), packet.getY(), packet.getZ(), "Particle / " + BuiltInRegistries.PARTICLE_TYPE.getKey(type).getPath(), now);
+                var type = packet.particle().getType();
+                add(packet.x(), packet.y(), packet.z(), "Particle / " + BuiltInRegistries.PARTICLE_TYPE.getKey(type).getPath(), now);
             } else if (p instanceof LightPacket update && light.get()) enqueueLight(update.x, update.z, update.data, now);
             else if (p instanceof ClientboundForgetLevelChunkPacket unload) {
                 ChunkPos chunk = unload.pos();
@@ -121,15 +121,15 @@ public class ActivityESP extends Module {
 
     private void enqueueLight(int x, int z, ClientboundLightUpdatePacketData data, long now) {
         int base = mc.level.getChunkSource().getLightEngine().getMinLightSection();
-        var empty = data.getEmptyBlockYMask();
+        var empty = data.emptyBlockYMask();
         for (int bit = empty.nextSetBit(0); bit >= 0; bit = empty.nextSetBit(bit + 1)) {
             Section key = new Section(x, base + bit, z);
             lit.remove(key); lightQueue.removeIf(item -> item.section.equals(key));
         }
-        var mask = data.getBlockYMask(); int index = 0;
+        var mask = data.blockYMask(); int index = 0;
         for (int bit = mask.nextSetBit(0); bit >= 0; bit = mask.nextSetBit(bit + 1)) {
-            if (index >= data.getBlockUpdates().size()) break;
-            byte[] bytes = data.getBlockUpdates().get(index++);
+            if (index >= data.blockUpdates().size()) break;
+            byte[] bytes = data.blockUpdates().get(index++);
             Section key = new Section(x, base + bit, z);
             lightQueue.removeIf(item -> item.section.equals(key));
             lit.remove(key); // A newer update supersedes the old observation even if the queue is full.
@@ -140,7 +140,7 @@ public class ActivityESP extends Module {
         }
     }
     private static boolean trackedParticle(ClientboundLevelParticlesPacket packet) {
-        var type = packet.getParticle().getType();
+        var type = packet.particle().getType();
         return type == ParticleTypes.FLAME || type == ParticleTypes.SMALL_FLAME || type == ParticleTypes.SMOKE
             || type == ParticleTypes.CAMPFIRE_COSY_SMOKE || type == ParticleTypes.CAMPFIRE_SIGNAL_SMOKE || type == ParticleTypes.NOTE;
     }

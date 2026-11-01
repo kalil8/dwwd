@@ -17,11 +17,26 @@ import com.gaspoweredcake.client33.utils.storage.ContainerObservations;
 import com.gaspoweredcake.client33.utils.storage.ContainerSnapshot;
 import com.gaspoweredcake.client33.utils.render.NametagUtils;
 import com.gaspoweredcake.client33.utils.render.StoragePillar;
+import com.gaspoweredcake.client33.utils.render.StorageLocator;
+import com.gaspoweredcake.client33.utils.render.CachedStorageIndex;
+import com.gaspoweredcake.client33.utils.render.StorageView;
+import com.gaspoweredcake.client33.utils.render.LiveChunkVisibility;
+import com.gaspoweredcake.client33.utils.render.StorageLeadSelector;
+import com.mojang.blaze3d.systems.RenderSystem;
+import org.joml.Matrix4f;
+import com.gaspoweredcake.client33.modintegration.BobbyStorageBridge;
+import de.johni0702.minecraft.bobby.FakeChunk;
+import com.gaspoweredcake.client33.utils.render.StorageClusters;
+import com.gaspoweredcake.client33.utils.render.StorageHistory;
+import com.gaspoweredcake.client33.utils.render.StorageSignals;
+import com.gaspoweredcake.client33.events.packets.PlaySoundPacketEvent;
+import com.gaspoweredcake.client33.events.world.ChunkDataEvent;
 import com.gaspoweredcake.client33.utils.render.LabelLayout;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.Nameable;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import org.joml.Vector3d;
@@ -64,28 +79,67 @@ public class StorageESP extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgData = settings.createGroup("Container Intelligence");
     private final SettingGroup sgVisual = settings.createGroup("Signature Visuals");
+    private final SettingGroup sgLeads = settings.createGroup("Storage Leads");
+    private final Setting<Boolean> storageLeads = sgLeads.add(new BoolSetting.Builder().name("storage-leads")
+        .description("Show bearings and coordinates for groups of received storage, including offscreen groups. A lead is not proof of a base.")
+        .defaultValue(true).build());
+    private final Setting<Integer> leadMinimum = sgLeads.add(new IntSetting.Builder().name("minimum-containers")
+        .description("Minimum observed containers per spatial group.").defaultValue(3).range(1,64).sliderRange(1,16).build());
+    private final Setting<Integer> leadRows = sgLeads.add(new IntSetting.Builder().name("lead-rows")
+        .description("Number of groups on the compact storage compass; does not affect discovery or box rendering.")
+        .defaultValue(4).range(1,12).sliderRange(1,8).build());
+    private final Setting<StorageLeadSelector.Order> leadOrder = sgLeads.add(new EnumSetting.Builder<StorageLeadSelector.Order>()
+        .name("lead-order").description("Prioritize larger groups or nearby groups within each observation source.")
+        .defaultValue(StorageLeadSelector.Order.Largest).build());
+    private List<StorageClusters.Lead> leads = List.of();
+    private record RememberedLead(StorageClusters.Lead lead, long lastSeen) { }
+    private final CachedStorageIndex cachedIndex = new CachedStorageIndex();
+    private final LiveChunkVisibility frameChunkVisibility = new LiveChunkVisibility();
+    private final ArrayDeque<java.lang.ref.WeakReference<FakeChunk>> cachedScanQueue = new ArrayDeque<>();
+    private List<CachedStorageIndex.Entry> cachedLocations = List.of();
+    private List<CachedStorageIndex.Page> cachedPages = List.of();
+    private List<StorageClusters.Lead> cachedLeads = List.of();
+    private List<StorageLeadSelector.Candidate> displayLeads = List.of();
+    private final Setting<Boolean> cachedStorage = sgLeads.add(new BoolSetting.Builder().name("cached-storage")
+        .description("Index Bobby's saved container records across 300-chunk terrain range. Cached markers have unknown observation age and never imply live contents.")
+        .defaultValue(true).onChanged(value -> { if (!value) clearCachedStorage(); }).build());
+    private final StorageHistory history = new StorageHistory();
+    private List<StorageHistory.Sighting> rememberedLocations = List.of();
+    private List<RememberedLead> rememberedLeads = List.of();
+    private final Setting<Boolean> rememberLocations = sgLeads.add(new BoolSetting.Builder().name("remember-locations")
+        .description("Keep session coordinates after chunk unload, explicitly labeled Last seen. Clears on world change or deactivation.")
+        .defaultValue(true).onChanged(value -> { if (!value) { history.clear(); rememberedLeads = List.of(); rememberedLocations = List.of(); } }).build());
+    private final StorageSignals soundSignals = new StorageSignals();
+    private List<StorageSignals.Signal> heardSignals = List.of();
+    private final Setting<Boolean> storageSounds = sgLeads.add(new BoolSetting.Builder().name("storage-sounds")
+        .description("Add server-sent container sound coordinates as Heard leads. Sounds do not prove a container, base or another player's activity.")
+        .defaultValue(true).onChanged(value -> { if (!value) { soundSignals.clear(); heardSignals = List.of(); } }).build());
+    private final Setting<Integer> locationLifetime = sgLeads.add(new IntSetting.Builder().name("location-lifetime-minutes")
+        .description("Expire old location leads; no distance-based eviction. Revisited chunks replace their old observations.")
+        .defaultValue(120).range(1,1440).sliderRange(5,240).visible(rememberLocations::get).build());
     private final ContainerObservations observations = new ContainerObservations();
     private record Overlay(Object source, AABB bounds, Color color, double distance) {}
     private final List<Overlay> overlays = new ArrayList<>();
-    private final List<BlockEntity> ordered = new ArrayList<>();
     private Object focused;
     private final Setting<Boolean> labels = sgData.add(new BoolSetting.Builder().name("labels").description("Decluttered storage type, distance and observed occupancy labels.").defaultValue(true).build());
     private final Setting<Boolean> inspector = sgData.add(new BoolSetting.Builder().name("inspector").description("Point at storage for coordinates, block properties and remembered content summaries.").defaultValue(true).build());
     private final Setting<Boolean> rememberContents = sgData.add(new BoolSetting.Builder().name("remember-contents").description("Remember server-sent contents after you open a container. Session only; never opens containers for you.").defaultValue(true).onChanged(value -> { if (!value) observations.clear(); }).build());
     private final Setting<Integer> memorySeconds = sgData.add(new IntSetting.Builder().name("memory-seconds").description("Expire remembered contents; other players may change them sooner.").defaultValue(300).range(10, 1800).sliderRange(10, 600).build());
     private final Setting<Integer> labelBudget = sgData.add(new IntSetting.Builder().name("label-budget").description("Maximum nonoverlapping labels per frame; closest containers have priority.").defaultValue(20).range(1, 64).sliderRange(1, 64).build());
-    private final Setting<Integer> labelRange = sgData.add(new IntSetting.Builder().name("label-range").description("Maximum distance for data labels and reticle selection.").defaultValue(40).range(4, 128).sliderRange(4, 128).build());
     private final Setting<Boolean> coordinates = sgData.add(new BoolSetting.Builder().name("label-coordinates").description("Add XYZ coordinates to each label; always shown in the inspector.").defaultValue(false).build());
     private final Setting<Integer> contentLines = sgData.add(new IntSetting.Builder().name("content-lines").description("Most numerous item types to list in the inspector.").defaultValue(5).range(1, 12).sliderRange(1, 12).build());
     private final Setting<Double> labelScale = sgVisual.add(new DoubleSetting.Builder().name("label-scale").description("Scale of container labels and inspector text.").defaultValue(0.7).range(0.4, 1.2).sliderRange(0.4, 1.2).build());
+    private final Setting<Boolean> distantLocators = sgVisual.add(new BoolSetting.Builder().name("distant-locators")
+        .description("Add camera-facing diamonds of approximately five pixels when storage boxes become too small to distinguish.")
+        .defaultValue(true).build());
     private final Setting<Boolean> pillars = sgVisual.add(new BoolSetting.Builder().name("vertical-pillars")
-        .description("Draw translucent pillars to build height for loaded storage. Fades from 32 to 128 blocks.")
+        .description("Draw translucent pillars to build height for all loaded storage, without a distance cutoff.")
         .defaultValue(false).build());
     private final Setting<Double> pillarWidth = sgVisual.add(new DoubleSetting.Builder().name("pillar-width")
         .description("Width of storage pillars in blocks.").defaultValue(0.2).range(0.05, 1).sliderRange(0.05, 1)
         .visible(pillars::get).build());
     private final Setting<Integer> pillarOpacity = sgVisual.add(new IntSetting.Builder().name("pillar-opacity")
-        .description("Maximum pillar opacity before distance fade and the storage color's opacity.")
+        .description("Pillar opacity multiplied by the storage color's opacity.")
         .defaultValue(48).range(0, 255).sliderRange(0, 128).visible(pillars::get).build());
     private final Setting<Boolean> animate = sgVisual.add(new BoolSetting.Builder().name("animate").description("Animate hologram scan bands and locator rings.").defaultValue(true).build());
     private final Setting<SettingColor> accent = sgVisual.add(new ColorSetting.Builder().name("scan-accent").description("Hologram scan and focused-container accent.").defaultValue(new SettingColor(106, 232, 217, 220)).build());
@@ -96,12 +150,9 @@ public class StorageESP extends Module {
     private Object scanWorld;
     private int scanTick;
     private final Setting<Integer> chunksPerTick = sgGeneral.add(new IntSetting.Builder().name("chunks-per-tick")
-        .description("Incremental discovery budget for loaded 26.2 chunk block entities.").defaultValue(4).range(1, 32).sliderRange(1, 32).build());
+        .description("Loaded chunks indexed each tick. Controls discovery latency, never rendering range.").defaultValue(32).range(1, 256).sliderRange(1, 128).build());
     private final Setting<Boolean> vehicles = sgGeneral.add(new BoolSetting.Builder().name("container-vehicles")
         .description("Include loaded container entities such as chest boats and chest/hopper minecarts.").defaultValue(true).build());
-    private final Setting<Integer> renderBudget = sgGeneral.add(new IntSetting.Builder().name("render-budget")
-        .description("Maximum container overlays per frame.").defaultValue(512).range(16, 4096).sliderRange(16, 1024).build());
-
     private final Setting<Mode> mode = sgGeneral.add(new EnumSetting.Builder<Mode>()
         .name("mode")
         .description("Rendering mode.")
@@ -220,25 +271,6 @@ public class StorageESP extends Module {
         .build()
     );
 
-    private final Setting<Integer> maxDistance = sgGeneral.add(new IntSetting.Builder()
-        .name("max-distance")
-        .description("Stops showing storage beyond this camera distance. Set to 0 for unlimited range.")
-        .defaultValue(64)
-        .min(0)
-        .sliderMax(128)
-        .build()
-    );
-
-    private final Setting<Integer> farFadeDistance = sgGeneral.add(new IntSetting.Builder()
-        .name("far-fade-distance")
-        .description("Distance over which storage gently fades out near the maximum range.")
-        .defaultValue(12)
-        .min(0)
-        .sliderMax(32)
-        .visible(() -> maxDistance.get() > 0)
-        .build()
-    );
-
     private final Setting<Boolean> hideOpened = sgOpened.add(new BoolSetting.Builder()
         .name("hide-opened")
         .description("Hides containers with an unexpired server-observed contents snapshot.")
@@ -263,7 +295,7 @@ public class StorageESP extends Module {
     private final MeshBuilderVertexConsumerProvider vertexConsumerProvider;
 
     public StorageESP() {
-        super(Categories.Render, "storage-esp", "Incrementally indexes loaded 26.2 containers and vehicle storage, with bounded discovery and rendering.");
+        super(Categories.Render, "storage-esp", "Indexes every loaded container and vehicle storage without distance or overlay count limits.");
 
         mesh = new MeshBuilder(Client33RenderPipelines.WORLD_COLORED);
         vertexConsumerProvider = new MeshBuilderVertexConsumerProvider(mesh);
@@ -326,9 +358,10 @@ public class StorageESP extends Module {
         Mode renderMode = mode.get();
 
         if (scanWorld != mc.level) clearCache();
+        renderRememberedLocations(event);
+        renderCachedLocations(event);
         if (pillars.get() && pillarOpacity.get() > 0) renderPillars(event);
-        for (BlockEntity blockEntity : ordered) {
-            if (count >= renderBudget.get()) break;
+        for (BlockEntity blockEntity : containers.values()) {
             BlockPos livePos = blockEntity.getBlockPos();
             if (!mc.level.hasChunk(livePos.getX() >> 4, livePos.getZ() >> 4)
                 || mc.level.getBlockEntity(livePos) != blockEntity) continue;
@@ -375,6 +408,7 @@ public class StorageESP extends Module {
                 if (mode.get() == Mode.Box) {
                     renderBox(event, blockEntity);
                 }
+                if (!isSecondHalfOfDoubleChest(blockEntity)) renderLocator(event, bounds(blockEntity), lineColor);
 
                 if (mode.get() == Mode.Shader) {
                     renderShader(event, blockEntity);
@@ -398,7 +432,6 @@ public class StorageESP extends Module {
             PostProcessShaders.STORAGE_OUTLINE.render();
         }
         if (vehicles.get()) for (var entity : mc.level.entitiesForRendering()) {
-            if (count >= renderBudget.get()) break;
             if (!(entity instanceof ContainerEntity) || !entity.isAlive()) continue;
             double opacity = opacityAt(entity.blockPosition());
             if (opacity < 0.075) continue;
@@ -412,6 +445,7 @@ public class StorageESP extends Module {
             }
             if (focused == entity) line.set(accent.get());
             event.renderer.box(bounds, fill, line, shapeMode.get(), 0);
+            renderLocator(event, bounds, line);
             if (boxStyle.get() == BoxStyle.Hologram) hologram(event, bounds, line);
             if (tracers.get()) event.renderer.line(RenderUtils.center.x, RenderUtils.center.y, RenderUtils.center.z, bounds.getCenter().x, bounds.getCenter().y, bounds.getCenter().z, line);
             overlays.add(new Overlay(entity, bounds, line, Math.sqrt(PlayerUtils.squaredDistanceToCamera(entity.getX(), entity.getY(), entity.getZ()))));
@@ -419,10 +453,97 @@ public class StorageESP extends Module {
         }
     }
 
+    private void renderLocator(Render3DEvent event, AABB bounds, Color color) {
+        if (!distantLocators.get() || color.a <= 0) return;
+        var center = bounds.getCenter();
+        var projected = StorageLocator.project(center.x - event.offsetX, center.y - event.offsetY,
+            center.z - event.offsetZ, RenderUtils.projection.m11(), mc.getWindow().getHeight());
+        if (projected == null) return;
+        center = new Vec3(event.offsetX + projected.x(), event.offsetY + projected.y(), event.offsetZ + projected.z());
+        var diamond = projected.diamond();
+        double rx = diamond.rightX(), rz = diamond.rightZ();
+        double ux = diamond.upX(), uy = diamond.upY(), uz = diamond.upZ();
+        event.renderer.line(center.x + rx, center.y, center.z + rz, center.x + ux, center.y + uy, center.z + uz, color);
+        event.renderer.line(center.x + ux, center.y + uy, center.z + uz, center.x - rx, center.y, center.z - rz, color);
+        event.renderer.line(center.x - rx, center.y, center.z - rz, center.x - ux, center.y - uy, center.z - uz, color);
+        event.renderer.line(center.x - ux, center.y - uy, center.z - uz, center.x + rx, center.y, center.z + rz, color);
+    }
+
+    private void renderCachedLocations(Render3DEvent event) {
+        if (!cachedStorage.get() || !distantLocators.get()) return;
+        Color color = new Color(159, 141, 211, 160);
+        var clip = new Matrix4f(RenderUtils.projection).mul(RenderSystem.getModelViewStack()).mul(event.matrices.last().pose());
+        var view = new StorageView(clip, event.offsetX, event.offsetY, event.offsetZ,
+            mc.getWindow().getWidth(), mc.getWindow().getHeight());
+        frameChunkVisibility.beginFrame();
+        var level = mc.level;
+        LiveChunkVisibility.Lookup liveLookup = (x, z) -> BobbyStorageBridge.isLive(level, x, z);
+        for (var page : cachedPages) {
+            // Near hologram rings extend 0.15 blocks beyond the unit container bounds.
+            if (!view.intersects(page.minX() - .2, page.minY() - .2, page.minZ() - .2,
+                page.maxX() + .2, page.maxY() + .2, page.maxZ() + .2)) continue;
+            for (var entry : page.entries()) {
+                if (!view.intersects(entry.x() - .2, entry.y() - .2, entry.z() - .2,
+                    entry.x() + 1.2, entry.y() + 1.2, entry.z() + 1.2)) continue;
+                if (frameChunkVisibility.isLive(entry.x() >> 4, entry.z() >> 4, liveLookup)) continue;
+                double cx = entry.x() + .5, cy = entry.y() + .5, cz = entry.z() + .5;
+                var marker = StorageLocator.project(cx - event.offsetX, cy - event.offsetY, cz - event.offsetZ,
+                    RenderUtils.projection.m11(), mc.getWindow().getHeight());
+                if (marker == null) {
+                    // Cached close-up storage uses corner rails, never a filled live box.
+                    hologram(event, new AABB(entry.x(), entry.y(), entry.z(), entry.x() + 1, entry.y() + 1, entry.z() + 1), color);
+                    continue;
+                }
+                double x = event.offsetX + marker.x(), y = event.offsetY + marker.y(), z = event.offsetZ + marker.z();
+                var d = marker.diamond();
+                // Violet brackets distinguish disk cache from solid live diamonds and history crosses.
+                for (int sign = -1; sign <= 1; sign += 2) {
+                    event.renderer.line(x + sign * d.rightX(), y, z + sign * d.rightZ(),
+                        x + sign * d.rightX() + d.upX(), y + d.upY(), z + sign * d.rightZ() + d.upZ(), color);
+                    event.renderer.line(x + sign * d.rightX(), y, z + sign * d.rightZ(),
+                        x + sign * d.rightX() - d.upX(), y - d.upY(), z + sign * d.rightZ() - d.upZ(), color);
+                }
+            }
+        }
+    }
+
+    private void clearCachedStorage() {
+        cachedIndex.clear(); cachedScanQueue.clear(); cachedLocations = List.of(); cachedPages = List.of(); cachedLeads = List.of();
+    }
+
+    public void indexCachedChunk(FakeChunk chunk) {
+        if (!isActive() || !cachedStorage.get() || mc.level == null || !mc.isSameThread()) return;
+        if (!BobbyStorageBridge.isCurrent(mc.level, chunk)) return;
+        if (scanWorld != mc.level) clearCache();
+        cachedIndex.replace(chunk.getPos().x(), chunk.getPos().z(), BobbyStorageBridge.records(chunk));
+    }
+
+    private void renderRememberedLocations(Render3DEvent event) {
+        if (!rememberLocations.get() || !distantLocators.get()) return;
+        long now = CombatTelemetry.now();
+        long lifetime = locationLifetime.get() * 60_000L;
+        Color color = new Color(accent.get()).a(Math.min(150, accent.get().a));
+        for (var sighting : rememberedLocations) {
+            var p = sighting.point();
+            if (now - sighting.lastSeenMillis() > lifetime
+                || BobbyStorageBridge.isLive(mc.level, (int) Math.floor(p.x()) >> 4, (int) Math.floor(p.z()) >> 4)) continue;
+            var marker = StorageLocator.project(p.x() - event.offsetX, p.y() - event.offsetY,
+                p.z() - event.offsetZ, RenderUtils.projection.m11(), mc.getWindow().getHeight());
+            if (marker == null) continue;
+            double x = event.offsetX + marker.x(), y = event.offsetY + marker.y(), z = event.offsetZ + marker.z();
+            var d = marker.diamond();
+            // A broken cross distinguishes remembered coordinates from solid live diamonds.
+            for (int sign = -1; sign <= 1; sign += 2) {
+                event.renderer.line(x + sign * d.rightX() * .4, y, z + sign * d.rightZ() * .4,
+                    x + sign * d.rightX(), y, z + sign * d.rightZ(), color);
+                event.renderer.line(x + sign * d.upX() * .4, y + sign * d.upY() * .4, z + sign * d.upZ() * .4,
+                    x + sign * d.upX(), y + sign * d.upY(), z + sign * d.upZ(), color);
+            }
+        }
+    }
+
     private void renderPillars(Render3DEvent event) {
-        int drawn = 0;
-        for (BlockEntity blockEntity : ordered) {
-            if (drawn >= renderBudget.get()) break;
+        for (BlockEntity blockEntity : containers.values()) {
             BlockPos pos = blockEntity.getBlockPos();
             if (!mc.level.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)
                 || mc.level.getBlockEntity(pos) != blockEntity || isSecondHalfOfDoubleChest(blockEntity)) continue;
@@ -431,18 +552,17 @@ public class StorageESP extends Module {
             getBlockEntityColor(blockEntity);
             if (!render) continue;
             if (snapshot != null && openedColor.get().a > 0) lineColor.set(openedColor.get());
-            if (renderPillar(event, bounds(blockEntity), lineColor)) drawn++;
+            renderPillar(event, bounds(blockEntity), lineColor);
         }
         if (!vehicles.get()) return;
         for (var entity : mc.level.entitiesForRendering()) {
-            if (drawn >= renderBudget.get()) break;
             if (!(entity instanceof ContainerEntity) || !entity.isAlive()) continue;
             var snapshot = observations.snapshot(entity, memorySeconds.get() * 1000L);
             if (snapshot != null && hideOpened.get()) continue;
             Color color = snapshot != null && openedColor.get().a > 0 ? openedColor.get() : other.get();
             AABB bounds = entity.getBoundingBox().move(Mth.lerp(event.tickDelta, entity.xOld, entity.getX()) - entity.getX(),
                 Mth.lerp(event.tickDelta, entity.yOld, entity.getY()) - entity.getY(), Mth.lerp(event.tickDelta, entity.zOld, entity.getZ()) - entity.getZ());
-            if (renderPillar(event, bounds, color)) drawn++;
+            renderPillar(event, bounds, color);
         }
     }
 
@@ -460,40 +580,121 @@ public class StorageESP extends Module {
     }
 
     private void clearCache() {
-        containers.clear(); ordered.clear(); overlays.clear(); observations.clear(); focused = null; scanQueue.clear(); scanTick = 0; scanWorld = mc.level;
+        clearCachedStorage();
+        containers.clear(); history.clear(); rememberedLocations = List.of(); soundSignals.clear(); heardSignals = List.of(); leads = List.of(); rememberedLeads = List.of(); displayLeads = List.of(); overlays.clear(); observations.clear(); focused = null; scanQueue.clear(); scanTick = 0; scanWorld = mc.level;
     }
     @Override public void onActivate() { clearCache(); }
     @Override public void onDeactivate() { clearCache(); }
     @EventHandler private void onLeave(GameLeftEvent event) { clearCache(); }
+    @EventHandler private void onStorageSound(PlaySoundPacketEvent event) {
+        if (!storageSounds.get() || mc.level == null) return;
+        var packet = event.packet;
+        String id = packet.getSound().value().location().toString();
+        var world = mc.level;
+        mc.execute(() -> {
+            if (!isActive() || world != mc.level) return;
+            if (scanWorld != world) clearCache();
+            soundSignals.hear(id, packet.getX(), packet.getY(), packet.getZ(), CombatTelemetry.now());
+        });
+    }
+
+    @EventHandler private void onChunkData(ChunkDataEvent event) {
+        var world = mc.level;
+        mc.execute(() -> {
+            if (!isActive() || world == null || world != mc.level) return;
+            if (scanWorld != world) clearCache();
+            ChunkAccess chunk = event.chunk();
+            if (world.hasChunk(chunk.getPos().x(), chunk.getPos().z())
+                && world.getChunk(chunk.getPos().x(), chunk.getPos().z()) == chunk) indexChunk(chunk);
+        });
+    }
+
+    private void indexChunk(ChunkAccess chunk) {
+        cachedIndex.remove(chunk.getPos().x(), chunk.getPos().z());
+        List<StorageClusters.Point> positions = new ArrayList<>();
+        for (BlockPos pos : chunk.getBlockEntitiesPos()) {
+            BlockEntity entity = mc.level.getBlockEntity(pos);
+            if (entity != null && storageBlocks.get().contains(entity.getType())) {
+                containers.put(pos.immutable(), entity);
+                if (!isSecondHalfOfDoubleChest(entity)) positions.add(new StorageClusters.Point(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5));
+            } else containers.remove(pos);
+        }
+        if (rememberLocations.get()) history.observe(chunk.getPos().x(), chunk.getPos().z(), positions, CombatTelemetry.now());
+    }
+
     @EventHandler private void onTick(TickEvent.Post event) {
         if (scanWorld != mc.level) clearCache();
+        if (mc.level == null || mc.player == null) return;
         observations.tick(memorySeconds.get() * 1000L);
         if (++scanTick % 20 == 0) containers.entrySet().removeIf(entry -> !mc.level.hasChunk(entry.getKey().getX() >> 4, entry.getKey().getZ() >> 4)
             || mc.level.getBlockEntity(entry.getKey()) != entry.getValue());
-        if (scanQueue.isEmpty()) for (ChunkAccess chunk : Utils.chunks()) {
-            double x = chunk.getPos().x() * 16.0 + 8, z = chunk.getPos().z() * 16.0 + 8;
-            int scanDistance = maxDistance.get() == 0 ? 0 : Math.max(maxDistance.get(), pillars.get() ? 128 : 0);
-            if (scanDistance == 0 || PlayerUtils.squaredDistanceToCamera(x, mc.player.getY(), z) <= Math.pow(scanDistance + 24, 2)) scanQueue.addLast(chunk);
-        }
+        // Sweep actual received slots, including chunks outside the terrain renderer's radius.
+        if (scanQueue.isEmpty()) for (ChunkAccess chunk : Utils.chunks()) scanQueue.addLast(chunk);
         for (int i = 0; i < chunksPerTick.get() && !scanQueue.isEmpty(); i++) {
             ChunkAccess chunk = scanQueue.removeFirst();
             if (!mc.level.hasChunk(chunk.getPos().x(), chunk.getPos().z()) || mc.level.getChunk(chunk.getPos().x(), chunk.getPos().z()) != chunk) continue;
-            for (BlockPos pos : chunk.getBlockEntitiesPos()) {
-                BlockEntity entity = mc.level.getBlockEntity(pos);
-                if (entity == null || !storageBlocks.get().contains(entity.getType())) continue;
-                if (containers.size() >= 8192 && !containers.containsKey(pos)) containers.remove(containers.keySet().iterator().next());
-                containers.put(pos.immutable(), entity);
+            indexChunk(chunk);
+        }
+        if (cachedStorage.get()) {
+            if (cachedScanQueue.isEmpty() && scanTick % 20 == 0) {
+                for (var chunk : BobbyStorageBridge.chunks(mc.level)) cachedScanQueue.addLast(new java.lang.ref.WeakReference<>(chunk));
+            }
+            for (int i = 0; i < chunksPerTick.get() && !cachedScanQueue.isEmpty(); i++) {
+                var chunk = cachedScanQueue.removeFirst().get();
+                if (chunk == null || !BobbyStorageBridge.isCurrent(mc.level, chunk)) continue;
+                cachedIndex.replace(chunk.getPos().x(), chunk.getPos().z(), BobbyStorageBridge.records(chunk));
             }
         }
-        ordered.clear(); ordered.addAll(containers.values());
-        ordered.sort(Comparator.comparingDouble(be -> PlayerUtils.squaredDistanceToCamera(be.getBlockPos().getX() + 0.5, be.getBlockPos().getY() + 0.5, be.getBlockPos().getZ() + 0.5)));
+        heardSignals = storageSounds.get() ? soundSignals.recent(CombatTelemetry.now(), 120_000) : List.of();
+        if (scanTick % 20 == 1) updateLeads();
     }
 
 
+    private void updateLeads() {
+        var selectedIds = new java.util.HashSet<String>();
+        for (var type : storageBlocks.get()) selectedIds.add(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type).toString());
+        cachedLocations = cachedStorage.get() ? cachedIndex.matching(selectedIds::contains,
+            (x, z) -> BobbyStorageBridge.isLive(mc.level, x, z)) : List.of();
+        cachedPages = CachedStorageIndex.pages(cachedLocations);
+        cachedLeads = storageLeads.get() ? StorageClusters.group(cachedLocations.stream()
+            .map(entry -> new StorageClusters.Point(entry.x() + .5, entry.y() + .5, entry.z() + .5)).toList(), leadMinimum.get()) : List.of();
+        rememberedLocations = rememberLocations.get() ? history.unloaded((x, z) -> BobbyStorageBridge.isLive(mc.level, x, z),
+            CombatTelemetry.now(), locationLifetime.get() * 60_000L) : List.of();
+        if (!storageLeads.get()) { leads = List.of(); rememberedLeads = List.of(); displayLeads = List.of(); return; }
+        List<StorageClusters.Point> positions = new ArrayList<>();
+        var unique = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Object, Boolean>());
+        for (BlockEntity block : containers.values()) {
+            BlockPos pos = block.getBlockPos();
+            if (!storageBlocks.get().contains(block.getType()) || !mc.level.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)
+                || mc.level.getBlockEntity(pos) != block) continue;
+            Object source = ContainerObservations.canonical(block);
+            if (!unique.add(source) || (hideOpened.get() && observations.snapshot(source, memorySeconds.get() * 1000L) != null)) continue;
+            positions.add(new StorageClusters.Point(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5));
+        }
+        if (vehicles.get()) for (var entity : mc.level.entitiesForRendering()) {
+            if (entity instanceof ContainerEntity && entity.isAlive()
+                && (!hideOpened.get() || observations.snapshot(entity, memorySeconds.get() * 1000L) == null))
+                positions.add(new StorageClusters.Point(entity.getX(), entity.getY(), entity.getZ()));
+        }
+        leads = StorageClusters.group(positions, leadMinimum.get());
+        rememberedLeads = List.of();
+        if (rememberLocations.get()) {
+            var old = rememberedLocations;
+            var times = new java.util.HashMap<StorageClusters.Point, Long>();
+            for (var sighting : old) times.put(sighting.point(), sighting.lastSeenMillis());
+            rememberedLeads = StorageClusters.group(times.keySet(), leadMinimum.get()).stream()
+                .map(lead -> new RememberedLead(lead, times.get(lead.anchor()))).toList();
+        }
+        var candidates = new ArrayList<StorageLeadSelector.Candidate>();
+        for (var lead : leads) candidates.add(new StorageLeadSelector.Candidate(StorageLeadSelector.Source.CURRENT, lead.anchor(), lead.containers(), 0, ""));
+        for (var remembered : rememberedLeads) candidates.add(new StorageLeadSelector.Candidate(StorageLeadSelector.Source.REMEMBERED, remembered.lead().anchor(), remembered.lead().containers(), remembered.lastSeen(), ""));
+        for (var lead : cachedLeads) candidates.add(new StorageLeadSelector.Candidate(StorageLeadSelector.Source.CACHED, lead.anchor(), lead.containers(), 0, ""));
+        for (var signal : heardSignals) candidates.add(new StorageLeadSelector.Candidate(StorageLeadSelector.Source.HEARD, signal.point(), 0, signal.heardAt(), signal.label()));
+        displayLeads = StorageLeadSelector.select(candidates, leadRows.get(), leadOrder.get(), mc.player.getX(), mc.player.getY(), mc.player.getZ());
+    }
+
     private double opacityAt(BlockPos pos) {
         double distanceSquared = PlayerUtils.squaredDistanceToCamera(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-        int limit = maxDistance.get();
-        if (limit > 0 && distanceSquared >= (double) limit * limit) return 0;
 
         double distance = Math.sqrt(distanceSquared);
         double opacity = 1;
@@ -503,11 +704,6 @@ public class StorageESP extends Module {
             opacity *= t * t * (3 - 2 * t);
         }
 
-        int farFade = farFadeDistance.get();
-        if (limit > 0 && farFade > 0) {
-            double t = Mth.clamp((limit - distance) / Math.min(farFade, limit), 0, 1);
-            opacity *= t * t * (3 - 2 * t);
-        }
         return opacity;
     }
 
@@ -619,13 +815,12 @@ public class StorageESP extends Module {
     }
 
     @EventHandler private void onLabels(Render2DEvent event) {
-        if (mc.player == null || scanWorld != mc.level || mc.gui.screen() != null || (!labels.get() && !inspector.get())) { focused = null; return; }
+        if (mc.player == null || scanWorld != mc.level || mc.gui.screen() != null || (!labels.get() && !inspector.get() && !storageLeads.get())) { focused = null; return; }
         double width = mc.getWindow().getWidth(), height = mc.getWindow().getHeight();
         overlays.sort(Comparator.comparingDouble(Overlay::distance));
         Object hit = hitSource(); Overlay selection = null;
         double nearest = 75 * 75;
         for (Overlay overlay : overlays) {
-            if (overlay.distance > labelRange.get()) continue;
             if (overlay.source == hit) { selection = overlay; break; }
             var center = overlay.bounds.getCenter();
             Vector3d projected = new Vector3d(center.x, center.y, center.z);
@@ -638,11 +833,11 @@ public class StorageESP extends Module {
         Renderer2D.COLOR.begin();
         TextRenderer text = TextRenderer.get(); text.begin(event.graphics, labelScale.get());
         LabelLayout layout = new LabelLayout(width, height);
+        if (storageLeads.get()) drawLeads(text, width, height, layout);
         if (inspector.get() && selection != null) drawInspector(text, selection, width, height, layout);
         int drawn = 0;
         if (labels.get()) for (Overlay overlay : overlays) {
             if (drawn >= labelBudget.get()) break;
-            if (overlay.distance > labelRange.get()) continue;
             AABB box = overlay.bounds;
             Vector3d point = new Vector3d((box.minX + box.maxX) / 2, box.maxY + 0.28, (box.minZ + box.maxZ) / 2);
             if (!NametagUtils.to2D(point, 1, false) || point.z < 0 || point.z > 1) continue;
@@ -725,6 +920,47 @@ public class StorageESP extends Module {
             while (line.length() > 1 && text.getWidth(line) > w - 24) line = line.substring(0, line.length() - 2) + "…";
             text.render(line, rect.x() + 12, rect.y() + 9 + i * lineHeight, i == 0 ? accent.get() : i < 3 ? Color.WHITE : new Color(181, 197, 209), false);
         }
+    }
+
+    private void drawLeads(TextRenderer text, double width, double height, LabelLayout layout) {
+        List<String> rows = new ArrayList<>();
+        rows.add("STORAGE / " + leads.size() + " current / " + rememberedLeads.size() + " remembered / " + cachedLocations.size() + " cached / " + heardSignals.size() + " heard");
+        if (leads.isEmpty() && rememberedLeads.isEmpty() && cachedLeads.isEmpty() && heardSignals.isEmpty()) rows.add("Scanning received chunks / no matching group");
+        double lineHeight = text.getHeight() + 4;
+        int available = Math.max(0, Math.min(leadRows.get(), (int) ((height - 100 - 16 - lineHeight) / (2 * lineHeight))));
+        int shown = 0;
+        long now = CombatTelemetry.now();
+        for (var candidate : displayLeads) {
+            if (shown >= available) break;
+            if (candidate.source() == StorageLeadSelector.Source.CACHED && !cachedStorage.get()) continue;
+            if (candidate.source() == StorageLeadSelector.Source.REMEMBERED && (!rememberLocations.get() || now - candidate.time() > locationLifetime.get() * 60_000L)) continue;
+            if (candidate.source() == StorageLeadSelector.Source.HEARD && (!storageSounds.get() || now - candidate.time() > 120_000L)) continue;
+            var p = candidate.point();
+            long distance = Math.round(Math.sqrt(p.squaredDistance(mc.player.getX(), mc.player.getY(), mc.player.getZ())));
+            String bearing = StorageClusters.bearing(p.x() - mc.player.getX(), p.z() - mc.player.getZ());
+            String description = switch (candidate.source()) {
+                case CURRENT -> "CURRENT " + candidate.containers();
+                case REMEMBERED -> "LAST SEEN " + Math.max(0, (now - candidate.time()) / 60_000) + "m / " + candidate.containers();
+                case CACHED -> "CACHED / age unknown / " + candidate.containers();
+                case HEARD -> "HEARD " + Math.max(0, (now - candidate.time()) / 1000) + "s / " + candidate.label();
+            };
+            rows.add(description + " / " + bearing + " / " + distance + " m");
+            rows.add("XYZ " + (int) Math.floor(p.x()) + " " + (int) Math.floor(p.y()) + " " + (int) Math.floor(p.z()));
+            shown++;
+        }
+        double maxTextWidth = Math.max(0, width - 36);
+        if (height < 100 + 16 + lineHeight || maxTextWidth <= 0) return;
+        for (int i = 0; i < rows.size(); i++) {
+            String line = rows.get(i);
+            while (!line.isEmpty() && text.getWidth(line) > maxTextWidth) line = line.substring(0, line.length() - 1);
+            rows.set(i, line);
+        }
+        double w = rows.stream().mapToDouble(text::getWidth).max().orElse(0) + 20;
+        double h = rows.size() * lineHeight + 16;
+        var rect = new LabelLayout.Rect(8, 80, w, h);
+        layout.reserve(rect); panel(rect, accent.get());
+        for (int i = 0; i < rows.size(); i++) text.render(rows.get(i), rect.x() + 10, rect.y() + 8 + i * lineHeight,
+            i == 0 ? accent.get() : i % 2 == 1 ? Color.WHITE : new Color(171, 188, 202), false);
     }
 
     private void renderShader(Render3DEvent event, BlockEntity blockEntity) {

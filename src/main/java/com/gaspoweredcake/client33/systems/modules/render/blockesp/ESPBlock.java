@@ -10,6 +10,7 @@ import com.gaspoweredcake.client33.renderer.ShapeMode;
 import com.gaspoweredcake.client33.systems.modules.Modules;
 import com.gaspoweredcake.client33.utils.render.color.Color;
 import net.minecraft.core.BlockPos;
+import com.gaspoweredcake.client33.utils.intel.SectionSnapshot;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -94,7 +95,7 @@ public class ESPBlock {
     }
 
     public void update() {
-        state = mc.level.getBlockState(blockPos.set(x, y, z));
+        state = SectionSnapshot.live(mc.level, blockPos.set(x, y, z));
         neighbours = 0;
 
         if (isNeighbour(Direction.SOUTH)) neighbours |= FO;
@@ -122,7 +123,7 @@ public class ESPBlock {
 
     private boolean isNeighbour(Direction dir) {
         blockPos.set(x + dir.getStepX(), y + dir.getStepY(), z + dir.getStepZ());
-        BlockState neighbourState = mc.level.getBlockState(blockPos);
+        BlockState neighbourState = SectionSnapshot.live(mc.level, blockPos);
 
         if (neighbourState.getBlock() != state.getBlock()) return false;
 
@@ -164,7 +165,7 @@ public class ESPBlock {
 
     private boolean isNeighbourDiagonal(double x, double y, double z) {
         blockPos.set(this.x + x, this.y + y, this.z + z);
-        return state.getBlock() == mc.level.getBlockState(blockPos).getBlock();
+        return state.getBlock() == SectionSnapshot.live(mc.level, blockPos).getBlock();
     }
 
     public void render(Render3DEvent event) {

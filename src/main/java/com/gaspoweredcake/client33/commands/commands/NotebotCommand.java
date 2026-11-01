@@ -47,7 +47,7 @@ public class NotebotCommand extends Command {
     @Override
     public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.then(literal("help").executes(_ -> {
-            Util.getPlatform().openUri("https://github.com/GasPoweredCake/33");
+            com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create("https://github.com/GasPoweredCake/33"));
             return SINGLE_SUCCESS;
         }));
 
