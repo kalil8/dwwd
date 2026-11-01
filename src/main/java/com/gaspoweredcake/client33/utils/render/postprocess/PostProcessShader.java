@@ -57,6 +57,7 @@ public abstract class PostProcessShader {
     public void render() {
         if (!shouldDraw()) return;
 
+
         var renderer = MeshRenderer.begin()
             .attachments(mc.gameRenderer.mainRenderTarget())
             .pipeline(pipeline())

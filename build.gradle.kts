@@ -1,4 +1,6 @@
 import net.ltgt.gradle.errorprone.errorprone
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 
 plugins {
     alias(libs.plugins.fabric.loom)
@@ -118,6 +120,12 @@ dependencies {
     jij(libs.starscript)
     jij(libs.discord.ipc)
     jij(libs.reflections)
+    // Loom's include configuration does not automatically package transitive dependencies.
+    // These versions match the runtime dependencies of Reflections, Skija and MinecraftAuth.
+    jij("org.javassist:javassist:3.28.0-GA") { isTransitive = false }
+    jij("io.github.humbleui:types:0.2.0") { isTransitive = false }
+    jij("net.lenni0451.commons:httpclient:1.9.2") { isTransitive = false }
+    jij("net.lenni0451.commons:gson:1.9.2") { isTransitive = false }
     jij(libs.sqlite.jdbc) { isTransitive = false }
     jij(libs.netty.handler.proxy) { isTransitive = false }
     jij(libs.netty.codec.socks) { isTransitive = false }
@@ -300,3 +308,34 @@ val moduleLogicRegression = tasks.register<JavaExec>("moduleLogicRegression") {
     })
 }
 tasks.check { dependsOn(moduleLogicRegression) }
+
+// A development classpath can hide libraries missing from a distributed Fabric JAR.
+val verifyBundledRuntime = tasks.register("verifyBundledRuntime") {
+    group = "verification"
+    dependsOn(tasks.jar)
+    val archive = tasks.jar.flatMap { it.archiveFile }
+    inputs.file(archive)
+    doLast {
+        val required = mapOf(
+            "javassist-3.28.0-GA.jar" to "javassist/bytecode/ClassFile.class",
+            "types-0.2.0.jar" to "io/github/humbleui/types/RRect.class",
+            "httpclient-1.9.2.jar" to "net/lenni0451/commons/httpclient/HttpClient.class",
+            "gson-1.9.2.jar" to "net/lenni0451/commons/gson/GsonParser.class"
+        )
+        ZipFile(archive.get().asFile).use { zip ->
+            val metadata = zip.getInputStream(zip.getEntry("fabric.mod.json")).bufferedReader().readText()
+            required.forEach { (jar, clazz) ->
+                val path = "META-INF/jars/$jar"
+                check(metadata.contains(path)) { "$path is not declared in fabric.mod.json" }
+                val entry = zip.getEntry(path) ?: error("Missing bundled runtime library $path")
+                val found = ZipInputStream(zip.getInputStream(entry)).use { nested ->
+                    var current = nested.nextEntry
+                    while (current != null && current.name != clazz) current = nested.nextEntry
+                    current != null
+                }
+                check(found) { "$path does not contain $clazz" }
+            }
+        }
+    }
+}
+tasks.check { dependsOn(verifyBundledRuntime) }

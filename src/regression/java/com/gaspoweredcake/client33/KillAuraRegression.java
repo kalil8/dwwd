@@ -2,6 +2,7 @@ package com.gaspoweredcake.client33;
 
 import com.gaspoweredcake.client33.utils.combat.AttackCycle;
 import com.gaspoweredcake.client33.utils.combat.TargetSelection;
+import com.gaspoweredcake.client33.utils.combat.VisibleAim;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -33,6 +34,15 @@ final class KillAuraRegression {
         check(cycle.claim(next, true) && cycle.claim(next, true), "zero-delay custom batches remain supported");
         cycle.invalidate();
         check(!cycle.claim(next, true), "stop or world exit invalidates pending batches");
+        var eye = new VisibleAim.Point(0, 1.6, 0);
+        var min = new VisibleAim.Point(3, 0, -0.5);
+        var max = new VisibleAim.Point(4, 2, 0.5);
+        var clear = VisibleAim.find(eye, min, max, 5, p -> true).orElseThrow();
+        check(clear.x() > 3 && clear.x() < 4 && clear.y() >= 0 && clear.y() <= 2, "Aim point lies inside target hitbox");
+        var side = VisibleAim.find(eye, min, max, 5, p -> p.z() > .2).orElseThrow();
+        check(side.z() > .2 && side.squaredDistance(eye) <= 25, "Partially exposed side is found in range");
+        check(VisibleAim.find(eye, min, max, 5, p -> false).isEmpty(), "Fully blocked hitboxes have no visible aim point");
+        check(VisibleAim.find(eye, min, max, 2, p -> true).isEmpty(), "Samples outside configured reach are excluded");
         System.out.println("KillAura selection and attack-cycle regressions passed.");
     }
     private static void check(boolean condition, String message) { if (!condition) throw new AssertionError(message); }

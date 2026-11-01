@@ -102,7 +102,7 @@ public class KillAura extends Module {
 
     private final Setting<AimMethod> aimMethod = sgGeneral.add(new EnumSetting.Builder<AimMethod>()
         .name("aim-method")
-        .description("Configured Part uses Aim At; Closest Hitbox aims at the nearest interior point of the target bounds.")
+        .description("Choose the configured part, nearest point, or the nearest visible point on the target hitbox.")
         .defaultValue(AimMethod.ConfiguredPart)
         .visible(() -> rotation.get() != RotationMode.None)
         .build()
@@ -502,6 +502,8 @@ public class KillAura extends Module {
     }
 
     private boolean entityCheck(Entity entity) {
+        // Recheck the current crosshair at movement submission and in delayed rotation callbacks.
+        if (onlyOnLook.get() && mc.crosshairPickEntity != entity) return false;
         if (entity == mc.player || entity == mc.getCameraEntity() || entity.isRemoved() || entity.level() != mc.level) return false;
         if ((entity instanceof LivingEntity livingEntity && livingEntity.isDeadOrDying()) || !entity.isAlive())
             return false;
@@ -518,7 +520,8 @@ public class KillAura extends Module {
         double distanceSquared = dx * dx + dy * dy + dz * dz;
         if (distanceSquared > range.get() * range.get()) return false;
         double wallReach = Math.min(range.get(), wallsRange.get());
-        if (!PlayerUtils.canSeeEntity(entity) && distanceSquared > wallReach * wallReach) return false;
+        if (distanceSquared > wallReach * wallReach && (rotation.get() != RotationMode.None && aimMethod.get() == AimMethod.VisibleHitbox
+            ? visiblePoint(entity).isEmpty() : !PlayerUtils.canSeeEntity(entity))) return false;
         if (Math.abs(Mth.wrapDegrees(Rotations.getYaw(entity) - targetingYaw)) > fieldOfView.get() / 2) return false;
         if (ignoreTamed.get()) {
             if (entity instanceof OwnableEntity tameable
@@ -602,7 +605,14 @@ public class KillAura extends Module {
     }
 
     private void rotateTo(Entity target, Runnable callback) {
-        if (aimMethod.get() == AimMethod.ClosestHitbox) {
+        if (aimMethod.get() == AimMethod.VisibleHitbox) {
+            var point = visiblePoint(target);
+            if (point.isPresent()) {
+                Rotations.rotate(Rotations.getYaw(point.get()), Rotations.getPitch(point.get()), callback);
+                return;
+            }
+        }
+        if (aimMethod.get() == AimMethod.ClosestHitbox || aimMethod.get() == AimMethod.VisibleHitbox) {
             Vec3 eye = mc.player.getEyePosition();
             AABB box = target.getBoundingBox();
             if (!box.contains(eye)) {
@@ -614,6 +624,18 @@ public class KillAura extends Module {
             }
         }
         Rotations.rotate(Rotations.getYaw(target), Rotations.getPitch(target, aimAt.get()), callback);
+    }
+
+    private java.util.Optional<Vec3> visiblePoint(Entity target) {
+        Vec3 eye = mc.player.getEyePosition(); AABB box = target.getBoundingBox();
+        var result = com.gaspoweredcake.client33.utils.combat.VisibleAim.find(
+            new com.gaspoweredcake.client33.utils.combat.VisibleAim.Point(eye.x, eye.y, eye.z),
+            new com.gaspoweredcake.client33.utils.combat.VisibleAim.Point(box.minX, box.minY, box.minZ),
+            new com.gaspoweredcake.client33.utils.combat.VisibleAim.Point(box.maxX, box.maxY, box.maxZ), range.get(),
+            p -> mc.level.clip(new net.minecraft.world.level.ClipContext(eye, new Vec3(p.x(), p.y(), p.z()),
+                net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, mc.player))
+                .getType() == net.minecraft.world.phys.HitResult.Type.MISS);
+        return result.map(p -> new Vec3(p.x(), p.y(), p.z()));
     }
 
     private boolean acceptableWeapon(ItemStack stack) {
@@ -641,7 +663,7 @@ public class KillAura extends Module {
         return null;
     }
 
-    public enum AimMethod { ConfiguredPart, ClosestHitbox }
+    public enum AimMethod { ConfiguredPart, ClosestHitbox, VisibleHitbox }
 
     public enum AttackItems {
         Weapons,

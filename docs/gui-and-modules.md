@@ -176,7 +176,13 @@ The effect uses the existing through-walls entity mask. Its pattern and halo are
 
 Targets come from a nearby spatial query. A bounded priority queue retains the best candidates with scores calculated once per candidate and stable entity-ID tie breaking. Keep Target retains a valid primary target. Field of View limits the horizontal targeting cone. Attack and wall ranges both measure from the player's eyes to the closest point on the target hitbox.
 
-Aim Method defaults to Configured Part, using the existing Aim At choice. Closest Hitbox optionally aims at the nearest interior point of the target bounds, falling back to the configured part when your eyes are inside those bounds. It does not predict future movement or guarantee that the aim point is unobstructed.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:1a675d516722e375269e4fd395ef060c2e3ab8b9ea0670cee18ee37768fb51b5 -->
+
+Aim Method defaults to Configured Part, using the existing Aim At choice. Closest Hitbox optionally aims at the nearest interior point of the target bounds, falling back to the configured part when your eyes are inside those bounds. It does not predict future movement or guarantee that the aim point is unobstructed. Visible Hitbox samples interior points in order of proximity and uses a collider raycast to choose an unobstructed point within the configured range. If no sample is visible, attacks still respect the configured wall range and fall back to the nearest point where wall attacks are allowed. The server may use different reach or visibility rules. Only On Look rechecks the selected crosshair entity when an attack is sent.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- coderabbit-ai-generated:v1 -->
 

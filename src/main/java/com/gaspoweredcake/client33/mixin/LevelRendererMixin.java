@@ -130,9 +130,10 @@ public abstract class LevelRendererMixin implements ILevelRenderer {
         client33$pushEntityOutlineFramebuffer(shader.framebuffer);
         try {
             try (var frame = renderDispatcher.prepareFrame(outlineRenderCommandQueue)) {
+                // JOML's no-argument Vector4f has w=1, which makes an opaque full-screen mask.
                 try (var pass = com.mojang.blaze3d.systems.RenderSystem.getDevice().createCommandEncoder()
                     .createRenderPass(() -> "Client33 entity mask", shader.framebuffer.getColorTextureView(),
-                        java.util.Optional.of(new org.joml.Vector4f()), null, java.util.OptionalDouble.empty())) {
+                        java.util.Optional.of(new org.joml.Vector4f(0.0f)), null, java.util.OptionalDouble.empty())) {
                     com.mojang.blaze3d.systems.RenderSystem.bindDefaultUniforms(pass);
                     frame.executeOutline(pass);
                 }
