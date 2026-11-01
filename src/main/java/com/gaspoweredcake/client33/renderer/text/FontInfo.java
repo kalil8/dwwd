@@ -20,11 +20,19 @@ public record FontInfo(String family, Type type) {
         BoldItalic;
 
         public static Type fromString(String str) {
+            Type type = parse(str);
+            return type == null ? Regular : type;
+        }
+
+        /** Parse persisted display names as well as enum names; unknown names are rejected. */
+        public static Type parse(String str) {
+            if (str == null) return null;
             return switch (str) {
+                case "Regular" -> Regular;
                 case "Bold" -> Bold;
                 case "Italic" -> Italic;
                 case "Bold Italic", "BoldItalic" -> BoldItalic;
-                default -> Regular;
+                default -> null;
             };
         }
 

@@ -20,6 +20,7 @@ import com.gaspoweredcake.client33.utils.render.StoragePillar;
 import com.gaspoweredcake.client33.utils.render.StorageLocator;
 import com.gaspoweredcake.client33.utils.render.CachedStorageIndex;
 import com.gaspoweredcake.client33.utils.render.StorageView;
+import com.gaspoweredcake.client33.utils.render.LiveChunkVisibility;
 import com.gaspoweredcake.client33.utils.render.StorageLeadSelector;
 import com.mojang.blaze3d.systems.RenderSystem;
 import org.joml.Matrix4f;
@@ -93,6 +94,7 @@ public class StorageESP extends Module {
     private List<StorageClusters.Lead> leads = List.of();
     private record RememberedLead(StorageClusters.Lead lead, long lastSeen) { }
     private final CachedStorageIndex cachedIndex = new CachedStorageIndex();
+    private final LiveChunkVisibility frameChunkVisibility = new LiveChunkVisibility();
     private final ArrayDeque<java.lang.ref.WeakReference<FakeChunk>> cachedScanQueue = new ArrayDeque<>();
     private List<CachedStorageIndex.Entry> cachedLocations = List.of();
     private List<CachedStorageIndex.Page> cachedPages = List.of();
@@ -473,6 +475,9 @@ public class StorageESP extends Module {
         var clip = new Matrix4f(RenderUtils.projection).mul(RenderSystem.getModelViewStack()).mul(event.matrices.last().pose());
         var view = new StorageView(clip, event.offsetX, event.offsetY, event.offsetZ,
             mc.getWindow().getWidth(), mc.getWindow().getHeight());
+        frameChunkVisibility.beginFrame();
+        var level = mc.level;
+        LiveChunkVisibility.Lookup liveLookup = (x, z) -> BobbyStorageBridge.isLive(level, x, z);
         for (var page : cachedPages) {
             // Near hologram rings extend 0.15 blocks beyond the unit container bounds.
             if (!view.intersects(page.minX() - .2, page.minY() - .2, page.minZ() - .2,
@@ -480,7 +485,7 @@ public class StorageESP extends Module {
             for (var entry : page.entries()) {
                 if (!view.intersects(entry.x() - .2, entry.y() - .2, entry.z() - .2,
                     entry.x() + 1.2, entry.y() + 1.2, entry.z() + 1.2)) continue;
-                if (BobbyStorageBridge.isLive(mc.level, entry.x() >> 4, entry.z() >> 4)) continue;
+                if (frameChunkVisibility.isLive(entry.x() >> 4, entry.z() >> 4, liveLookup)) continue;
                 double cx = entry.x() + .5, cy = entry.y() + .5, cz = entry.z() + .5;
                 var marker = StorageLocator.project(cx - event.offsetX, cy - event.offsetY, cz - event.offsetZ,
                     RenderUtils.projection.m11(), mc.getWindow().getHeight());
@@ -651,8 +656,8 @@ public class StorageESP extends Module {
         cachedLocations = cachedStorage.get() ? cachedIndex.matching(selectedIds::contains,
             (x, z) -> BobbyStorageBridge.isLive(mc.level, x, z)) : List.of();
         cachedPages = CachedStorageIndex.pages(cachedLocations);
-        cachedLeads = StorageClusters.group(cachedLocations.stream()
-            .map(entry -> new StorageClusters.Point(entry.x() + .5, entry.y() + .5, entry.z() + .5)).toList(), leadMinimum.get());
+        cachedLeads = storageLeads.get() ? StorageClusters.group(cachedLocations.stream()
+            .map(entry -> new StorageClusters.Point(entry.x() + .5, entry.y() + .5, entry.z() + .5)).toList(), leadMinimum.get()) : List.of();
         rememberedLocations = rememberLocations.get() ? history.unloaded((x, z) -> BobbyStorageBridge.isLive(mc.level, x, z),
             CombatTelemetry.now(), locationLifetime.get() * 60_000L) : List.of();
         if (!storageLeads.get()) { leads = List.of(); rememberedLeads = List.of(); displayLeads = List.of(); return; }

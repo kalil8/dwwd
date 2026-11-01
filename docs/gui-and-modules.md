@@ -323,7 +323,13 @@ Live storage uses solid diamonds; session history uses broken crosses; saved cac
 
 The pure cache regression indexes all **361,201 positions** in a square extending 300 chunks along both axes, checks filtering, duplicate records and live invalidation, and independently checks locator projection at 4,800 blocks and farther. This is synthetic coverage, not an in-game FPS benchmark or live-server verification. Native startup and multiplayer checks remain separate gates.
 
-Cached-marker rendering groups the full filtered snapshot into **128-block spatial pages**. Each frame rejects pages and unit boxes outside four padded camera side planes before creating locator geometry or checking live chunk overrides. There are no near/far planes in this check: the terrain clipping distance never truncates the cache. Offscreen records still contribute to the compass and remain indexed; turning the camera queries the same complete snapshot. World-border positions are subtracted from the camera in double precision. The synthetic forward-camera regression retains all 361,201 records while visiting 95,716 candidates, and compares the result against testing every record. This measures candidate reduction, not FPS or server discovery.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:34b889bb224040ab04ea485867d867e86d7105df595b186d777b6b3ab2c6cfb0 -->
+
+Cached-marker rendering groups the full filtered snapshot into **128-block spatial pages**. Each frame rejects pages and unit boxes outside four padded camera side planes before creating locator geometry or checking live chunk overrides. There are no near/far planes in this check: the terrain clipping distance never truncates the cache. Offscreen records still contribute to the compass and remain indexed; turning the camera queries the same complete snapshot. World-border positions are subtracted from the camera in double precision. Visible cached markers in the same chunk share one liveness lookup per frame; the lookup resets next frame so live chunks continue to override stale cache promptly. Cached group calculation is skipped when Storage Leads is disabled, while cached markers and indexing continue.
+
+<!-- /coderabbit-ai-generated:v1 --> The synthetic forward-camera regression retains all 361,201 records while visiting 95,716 candidates, and compares the result against testing every record. This measures candidate reduction, not FPS or server discovery.
 
 This follows established techniques used in [JOML frustum tests](https://github.com/JOML-CI/JOML/blob/master/src/main/java/org/joml/FrustumIntersection.java) and [Conveyal R5 spatial hash grids](https://github.com/conveyal/r5/blob/dev/src/main/java/com/conveyal/r5/streets/IntHashGrid.java). The implementation uses the existing JOML dependency; no GIS library or copied project source is added. Bobby remains the source of saved chunk metadata.
 

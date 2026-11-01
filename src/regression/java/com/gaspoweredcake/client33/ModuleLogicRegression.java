@@ -32,6 +32,7 @@ public final class ModuleLogicRegression {
         StorageSignalsRegression.run();
         MaterialImageRegression.run();
         InputStateRegression.run();
+        FontRegression.run();
         SpawnerMenuRegression.run();
         PackedSectionRegression.run();
         LightFusionRegression.run();

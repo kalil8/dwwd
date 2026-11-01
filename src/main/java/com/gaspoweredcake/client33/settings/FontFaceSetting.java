@@ -9,6 +9,7 @@ import com.gaspoweredcake.client33.renderer.Fonts;
 import com.gaspoweredcake.client33.renderer.text.FontFace;
 import com.gaspoweredcake.client33.renderer.text.FontFamily;
 import com.gaspoweredcake.client33.renderer.text.FontInfo;
+import com.gaspoweredcake.client33.renderer.text.FontCatalog;
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.List;
@@ -27,12 +28,8 @@ public class FontFaceSetting extends Setting<FontFace> {
         if (split.length != 2) return null;
 
         for (FontFamily family : Fonts.FONT_FAMILIES) {
-            if (family.getName().replace(" ", "").equals(split[0])) {
-                try {
-                    return family.get(FontInfo.Type.valueOf(split[1]));
-                } catch (IllegalArgumentException _) {
-                    return null;
-                }
+            if (family.getName().replace(" ", "").equalsIgnoreCase(split[0])) {
+                return family.get(FontInfo.Type.parse(split[1]));
             }
         }
 
@@ -48,12 +45,7 @@ public class FontFaceSetting extends Setting<FontFace> {
     protected boolean isValueValid(FontFace value) {
         if (value == null) return false;
 
-        for (FontFamily fontFamily : Fonts.FONT_FAMILIES) {
-            if (fontFamily.hasType(value.info.type())) {
-                return true;
-            }
-        }
-        return false;
+        return FontCatalog.resolve(Fonts.FONT_FAMILIES, value.info.family(), value.info.type()) != null;
     }
 
     @Override
@@ -66,23 +58,14 @@ public class FontFaceSetting extends Setting<FontFace> {
     @Override
     protected FontFace load(CompoundTag tag) {
         String family = tag.getStringOr("family", "");
-        FontInfo.Type type;
-
-        try {
-            type = FontInfo.Type.valueOf(tag.getStringOr("type", ""));
-        } catch (IllegalArgumentException _) {
+        FontInfo.Type type = FontInfo.Type.parse(tag.getStringOr("type", ""));
+        if (type == null) {
             set(Fonts.DEFAULT_FONT);
             return get();
         }
 
-        boolean changed = false;
-        for (FontFamily fontFamily : Fonts.FONT_FAMILIES) {
-            if (fontFamily.getName().equals(family)) {
-                set(fontFamily.get(type));
-                changed = true;
-            }
-        }
-        if (!changed) set(Fonts.DEFAULT_FONT);
+        FontFace restored = FontCatalog.resolve(Fonts.FONT_FAMILIES, family, type);
+        if (!set(restored)) set(Fonts.DEFAULT_FONT);
 
         return get();
     }

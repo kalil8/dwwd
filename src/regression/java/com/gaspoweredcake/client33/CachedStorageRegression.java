@@ -1,6 +1,7 @@
 package com.gaspoweredcake.client33;
 
 import com.gaspoweredcake.client33.utils.render.CachedStorageIndex;
+import com.gaspoweredcake.client33.utils.render.LiveChunkVisibility;
 import java.util.List;
 
 public final class CachedStorageRegression {
@@ -25,6 +26,16 @@ public final class CachedStorageRegression {
         check(index.matching(_ -> true, (_, _) -> false).size() == 601 * 601 - 1, "Fresh server observations invalidate the corresponding cache");
         index.clear();
         check(index.matching(_ -> true, (_, _) -> false).isEmpty(), "World changes clear cached coordinates");
+        var visibility = new LiveChunkVisibility();
+        int[] calls = {0};
+        LiveChunkVisibility.Lookup lookup = (x, z) -> { calls[0]++; return x == -2 && z == 3; };
+        for (int i = 0; i < 10_000; i++) {
+            check(visibility.isLive(-2, 3, lookup), "Live chunk suppresses stale markers");
+            check(!visibility.isLive(3, -2, lookup), "A different signed chunk remains cached");
+        }
+        check(calls[0] == 2, "Repeated markers query each chunk once per frame");
+        visibility.beginFrame();
+        check(!visibility.isLive(-2, 3, (x, z) -> false), "Liveness is refreshed next frame");
         System.out.println("300-chunk cached storage regressions passed (361201 indexed chunks).");
     }
     private static void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
